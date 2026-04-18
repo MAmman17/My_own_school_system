@@ -106,7 +106,7 @@
         "students": "view",
         "teachers": "none",
         "staff": "none",
-        "classes": "view",
+        "classes": "manage",
         "fees": "none",
         "fee_challan": "none",
         "teacher_salaries": "none",

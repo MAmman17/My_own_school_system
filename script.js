@@ -2199,11 +2199,13 @@ function renderActiveSessionsTable(sessions = []) {
     sessions.forEach((session) => {
         const tr = document.createElement('tr');
         const shortUA = String(session.userAgent || '-').slice(0, 120);
+        const sessionPreview = String(session.sessionId || '').slice(0, 12) || '-';
         tr.innerHTML = `
             <td>
                 <div class="session-meta">
                     <strong>${escapeSessionText(session.fullName || session.username || 'Unknown')}</strong>
                     <small>${escapeSessionText(session.username || '-')}</small>
+                    <small>Session: ${escapeSessionText(sessionPreview)}</small>
                 </div>
             </td>
             <td>${escapeSessionText(session.role || '-')}</td>
@@ -2308,11 +2310,14 @@ async function updateActivePortalLogins() {
             .map(([role, count]) => `${role}: ${count}`)
             .join(' | ');
 
-        activePortalSessionsCache = getUniqueActiveUsersFromSessions(result.sessions || []);
-        const activeUserCount = Number(result.uniqueActiveUsers || activePortalSessionsCache.length || 0);
-        countEl.innerText = String(activeUserCount);
-        detailEl.title = roleCounts;
-        detailEl.innerHTML = `<i data-lucide="monitor-up" size="16"></i> ${activeUserCount} users active now`;
+        const allSessions = Array.isArray(result.sessions) ? result.sessions : [];
+        const uniqueUsersCount = Number(result.uniqueActiveUsers || getUniqueActiveUsersFromSessions(allSessions).length || 0);
+        const activeSessionCount = Number(result.totalActiveSessions || allSessions.length || 0);
+
+        activePortalSessionsCache = allSessions;
+        countEl.innerText = String(activeSessionCount);
+        detailEl.title = `${roleCounts}${roleCounts ? ' | ' : ''}Unique users: ${uniqueUsersCount}`;
+        detailEl.innerHTML = `<i data-lucide="monitor-up" size="16"></i> ${activeSessionCount} systems active now`;
         const overlay = document.getElementById('sessionModalOverlay');
         if (overlay?.classList.contains('active')) {
             renderActiveSessionsTable(activePortalSessionsCache);

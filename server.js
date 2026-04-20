@@ -457,12 +457,22 @@ function buildActiveSessionsSummary() {
 
     return {
         success: true,
-        totalActiveLogins: uniqueSessions.length,
+        totalActiveLogins: sessions.length,
         totalActiveSessions: sessions.length,
         uniqueActiveUsers: uniqueUsers.size,
         byRole,
-        sessions: uniqueSessions
+        sessions,
+        uniqueSessions
     };
+}
+
+function canManageActiveSessions(user = {}) {
+    const role = String(user?.role || '').trim().toLowerCase();
+    return role === 'admin'
+        || role === 'superadmin'
+        || role === 'super admin'
+        || role === 'system administrator'
+        || role === 'system_admin';
 }
 
 function readPermissions() {
@@ -806,7 +816,7 @@ app.post('/api/session/end', authenticateToken, (req, res) => {
 });
 
 app.get('/api/active-sessions', authenticateToken, (req, res) => {
-    if (req.user.role !== 'Admin') {
+    if (!canManageActiveSessions(req.user)) {
         return res.status(403).json({ success: false, message: 'Admin access required.' });
     }
 
@@ -814,7 +824,7 @@ app.get('/api/active-sessions', authenticateToken, (req, res) => {
 });
 
 app.delete('/api/active-sessions/:sessionId', authenticateToken, (req, res) => {
-    if (req.user.role !== 'Admin') {
+    if (!canManageActiveSessions(req.user)) {
         return res.status(403).json({ success: false, message: 'Admin access required.' });
     }
 
@@ -834,7 +844,7 @@ app.delete('/api/active-sessions/:sessionId', authenticateToken, (req, res) => {
 });
 
 app.post('/api/active-sessions/logout', authenticateToken, (req, res) => {
-    if (req.user.role !== 'Admin') {
+    if (!canManageActiveSessions(req.user)) {
         return res.status(403).json({ success: false, message: 'Admin access required.' });
     }
 

@@ -2606,6 +2606,31 @@ function viewStudentFromEncoded(encodedPayload) {
     viewStudent(payload);
 }
 
+function handleStudentActionSelect(selectElement, encodedPayload, studentId, isBranchUser = 0) {
+    const action = String(selectElement?.value || '').trim().toLowerCase();
+    if (!action) return;
+
+    if (selectElement) selectElement.value = '';
+
+    if (action === 'view') {
+        viewStudentFromEncoded(encodedPayload);
+        return;
+    }
+
+    if (Number(isBranchUser) === 1) {
+        return;
+    }
+
+    if (action === 'edit') {
+        editStudentFromEncoded(encodedPayload);
+        return;
+    }
+
+    if (action === 'delete') {
+        deleteStudent(studentId);
+    }
+}
+
 function viewStudent(student) {
     const modal = document.getElementById('studentViewModal');
     if (!modal) {
@@ -2736,12 +2761,14 @@ function renderStudents(term = '') {
                 <td class="cell-compact">${s.campusName || 'Main Campus'}</td>
                 <td>${s.gender || '-'}</td>
                 <td><span class="status-badge ${statusClass}">${s.feesStatus}</span></td>
-                <td><div class="student-actions">
-                    <button class="action-btn btn-view" onclick="viewStudentFromEncoded('${encodedStudent}')"><i data-lucide="eye" width="14"></i> View</button>
-                    ${loggedInUser?.role === 'Branch'
-                    ? ''
-                    : `<button class="action-btn btn-edit" onclick="editStudentFromEncoded('${encodedStudent}')"><i data-lucide="edit-2" width="14"></i> Edit</button>
-                    <button class="action-btn btn-delete" onclick="deleteStudent('${s.id}')"><i data-lucide="trash-2" width="14"></i> Delete</button>`}
+                <td><div class="table-action-wrap">
+                    <select class="table-action-select" onchange="handleStudentActionSelect(this, '${encodedStudent}', '${s.id}', ${loggedInUser?.role === 'Branch' ? 1 : 0})">
+                        <option value="">Actions</option>
+                        <option value="view">View</option>
+                        ${loggedInUser?.role === 'Branch' ? '' : `
+                        <option value="edit">Edit</option>
+                        <option value="delete">Delete</option>`}
+                    </select>
                 </div>
                 </td>
             `;

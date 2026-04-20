@@ -874,11 +874,7 @@ tbody tr:hover {
 
 #studentsTable td:nth-child(10) {
     text-align: center;
-    white-space: nowrap;
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    gap: 0.4rem;
+    white-space: normal;
     border-bottom: 1px solid var(--border-color);
 }
 
@@ -1988,9 +1984,33 @@ button {
 #studentsTable td:nth-child(10),
 #teachersTable td:nth-child(11),
 #staffTable td:nth-child(11) {
-    white-space: normal !important;
-    flex-wrap: wrap;
-    gap: 0.35rem;
+    white-space: nowrap !important;
+}
+
+.table-action-wrap {
+    display: flex;
+    justify-content: center;
+    width: 100%;
+}
+
+.table-action-select {
+    width: 92px;
+    max-width: 100%;
+    padding: 0.42rem 0.5rem;
+    border: 1px solid var(--border-color);
+    border-radius: 0.55rem;
+    background: #f8fafc;
+    color: var(--text-primary);
+    font-size: 0.78rem;
+    font-weight: 600;
+    line-height: 1.1;
+    cursor: pointer;
+}
+
+.table-action-select:focus {
+    outline: none;
+    border-color: var(--primary-color);
+    box-shadow: 0 0 0 2px rgba(32, 176, 164, 0.16);
 }
 
 /* Student table readability fix: keep name/father columns from collapsing */
@@ -2061,7 +2081,7 @@ button {
 
 #studentsTable th:nth-child(10),
 #studentsTable td:nth-child(10) {
-    min-width: 126px !important;
+    min-width: 92px !important;
 }
 
 /* Teachers table responsiveness and width tuning */
@@ -2187,7 +2207,7 @@ button {
 
     #studentsTable th:nth-child(10),
     #studentsTable td:nth-child(10) {
-        min-width: 116px !important;
+        min-width: 88px !important;
     }
 
     #teachersTable th,

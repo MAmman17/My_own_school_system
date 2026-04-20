@@ -26,15 +26,42 @@ const PRINCIPAL_PASSWORD = process.env.PRINCIPAL_PASSWORD || 'Principal123';
 app.use(cors());
 app.use(express.json({ limit: '25mb' }));
 app.use(express.urlencoded({ extended: true, limit: '25mb' }));
-app.use(express.static(__dirname));
+const RESERVED_ROUTE_NAMES = new Set(['api', 'health', 'socket.io']);
 
-app.get('/', (req, res) => {
-    res.json({
-        success: true,
-        message: 'Server is running.',
-        app: 'School Management System API'
-    });
+function resolvePageFileByRoute(routeName = '') {
+    const normalized = String(routeName || '').trim().toLowerCase();
+    if (!normalized) return '';
+    if (RESERVED_ROUTE_NAMES.has(normalized)) return '';
+    if (normalized === 'login' || normalized === 'index') return 'index.html';
+    if (!/^[a-z0-9_-]+$/i.test(normalized)) return '';
+
+    const candidate = `${normalized}.html`;
+    const candidatePath = path.join(__dirname, candidate);
+    return fs.existsSync(candidatePath) ? candidate : '';
+}
+
+app.get('/', (_req, res) => {
+    res.redirect(302, '/login');
 });
+
+app.get('/:pageName([a-zA-Z0-9_-]+).html', (req, res, next) => {
+    const pageName = String(req.params.pageName || '').toLowerCase();
+    if (RESERVED_ROUTE_NAMES.has(pageName)) return next();
+
+    const targetRoute = pageName === 'index' ? 'login' : pageName;
+    const targetFile = resolvePageFileByRoute(targetRoute);
+    if (!targetFile) return next();
+
+    return res.redirect(302, `/${targetRoute}`);
+});
+
+app.get('/:routeName([a-zA-Z0-9_-]+)', (req, res, next) => {
+    const pageFile = resolvePageFileByRoute(req.params.routeName);
+    if (!pageFile) return next();
+    return res.sendFile(path.join(__dirname, pageFile));
+});
+
+app.use(express.static(__dirname));
 
 app.get('/health', (_req, res) => {
     res.json({

@@ -32,6 +32,69 @@ let socket;
 let activePortalSessionsCache = [];
 const DEFAULT_CAMPUS_NAMES = ['Main Campus', 'Ali campus', 'Fatima Campus'];
 let studentQuickFilterBranchCampuses = [];
+const FALLBACK_ROUTE_TO_PAGE = {
+    login: 'index.html',
+    index: 'index.html',
+    dashboard: 'dashboard.html',
+    students: 'students.html',
+    teachers: 'teachers.html',
+    staff: 'staff.html',
+    classes: 'classes.html',
+    fees: 'fees.html',
+    fee_challan: 'fee_challan.html',
+    teacher_salaries: 'teacher_salaries.html',
+    student_attendance: 'student_attendance.html',
+    teacher_attendance: 'teacher_attendance.html',
+    student_attendance_report: 'student_attendance_report.html',
+    teacher_attendance_report: 'teacher_attendance_report.html',
+    notifications: 'notifications.html',
+    special_notices: 'special_notices.html',
+    exams: 'exams.html',
+    revenue: 'revenue.html',
+    settings: 'settings.html',
+    permissions: 'permissions.html',
+    branch_registration: 'branch_registration.html',
+    aboutme: 'aboutme.html',
+    student_portal: 'student_portal.html'
+};
+
+function normalizeClientPageName(pageValue = '') {
+    if (window.eduCoreAuth?.resolvePageNameFromPath) {
+        return window.eduCoreAuth.resolvePageNameFromPath(pageValue);
+    }
+
+    const rawValue = String(pageValue || '').trim().toLowerCase();
+    if (!rawValue || rawValue === '/' || rawValue === '.') return 'index.html';
+
+    const withoutHash = rawValue.split('#')[0];
+    const withoutQuery = withoutHash.split('?')[0];
+    const trimmedPath = withoutQuery.replace(/^\/+|\/+$/g, '');
+    if (!trimmedPath) return 'index.html';
+
+    const segment = trimmedPath.split('/').pop() || '';
+    if (!segment) return 'index.html';
+    if (FALLBACK_ROUTE_TO_PAGE[segment]) return FALLBACK_ROUTE_TO_PAGE[segment];
+    if (segment.endsWith('.html')) return segment;
+    return `${segment}.html`;
+}
+
+function getCurrentPageName() {
+    return normalizeClientPageName(window.location.pathname);
+}
+
+function isCurrentPage(...pageNames) {
+    const currentPage = getCurrentPageName();
+    return pageNames.some((pageName) => normalizeClientPageName(pageName) === currentPage);
+}
+
+function toRoutePath(pageName = '') {
+    if (window.eduCoreAuth?.toRoutePath) {
+        return window.eduCoreAuth.toRoutePath(pageName);
+    }
+    const normalizedPage = normalizeClientPageName(pageName);
+    if (normalizedPage === 'index.html') return '/login';
+    return `/${normalizedPage.replace(/\.html$/i, '')}`;
+}
 
 (function installAppPopups() {
     if (window.showAppAlert && window.showAppConfirm) return;
@@ -168,17 +231,17 @@ if (typeof io !== 'undefined') {
     // Listen for Real-Time SQL Updates
     socket.on('students_update', (data) => {
         localStorage.setItem(STORAGE_KEY_STUDENTS, JSON.stringify(mergeStudentRecords(data)));
-        if (window.location.pathname.includes('students.html')) renderStudents();
+        if (isCurrentPage('students.html')) renderStudents();
     });
 
     socket.on('teachers_update', (data) => {
         localStorage.setItem(STORAGE_KEY_TEACHERS, JSON.stringify(mergeTeacherRecords(data)));
-        if (window.location.pathname.includes('teachers.html')) renderTeachers();
+        if (isCurrentPage('teachers.html')) renderTeachers();
     });
 
     socket.on('staff_update', (data) => {
         localStorage.setItem(STORAGE_KEY_STAFF, JSON.stringify(mergeStaffRecords(data)));
-        if (window.location.pathname.includes('staff.html')) renderStaff();
+        if (isCurrentPage('staff.html')) renderStaff();
     });
 
     socket.on('session_forced_logout', (payload) => {
@@ -537,7 +600,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     };
 
                     setTimeout(() => {
-                        window.location.href = getPermissionHome() || getDefaultRoleHome();
+                        window.location.href = toRoutePath(getPermissionHome() || getDefaultRoleHome());
                     }, 800);
                 } else {
                     throw new Error(result.message || 'Invalid Username or Password');
@@ -1244,9 +1307,10 @@ function ensureBranchRegistrationNav() {
     if (!navLinks || !loggedInUser || loggedInUser.role !== 'Admin') return;
     if (navLinks.querySelector('[data-branch-registration-link]')) return;
 
-    const permissionsLink = navLinks.querySelector('a[href="permissions.html"]');
+    const permissionsLink = Array.from(navLinks.querySelectorAll('a[href]'))
+        .find((link) => normalizeClientPageName(link.getAttribute('href') || '') === 'permissions.html');
     const branchLink = document.createElement('a');
-    branchLink.href = 'branch_registration.html';
+    branchLink.href = toRoutePath('branch_registration.html');
     branchLink.className = 'nav-item';
     branchLink.dataset.branchRegistrationLink = 'true';
     branchLink.innerHTML = '<i data-lucide="building-2"></i><span>Branch Registration</span>';
@@ -1266,8 +1330,9 @@ function ensureAttendanceNav() {
     if (!navLinks || !loggedInUser || loggedInUser.role !== 'Admin') return;
     if (navLinks.querySelector('[data-attendance-nav]')) return;
 
-    const permissionsLink = navLinks.querySelector('a[href="permissions.html"]');
-    const currentPage = (window.location.pathname.split('/').pop() || '').toLowerCase();
+    const permissionsLink = Array.from(navLinks.querySelectorAll('a[href]'))
+        .find((link) => normalizeClientPageName(link.getAttribute('href') || '') === 'permissions.html');
+    const currentPage = getCurrentPageName();
     const isAttendancePage = currentPage === 'student_attendance.html' || currentPage === 'teacher_attendance.html';
     const isAttendanceReportPage = currentPage === 'student_attendance_report.html' || currentPage === 'teacher_attendance_report.html';
 
@@ -1292,19 +1357,19 @@ function ensureAttendanceNav() {
     const submenu = document.createElement('div');
     submenu.className = 'nav-submenu';
     submenu.innerHTML = `
-        <a href="student_attendance.html" class="nav-subitem${currentPage === 'student_attendance.html' ? ' active' : ''}">
+        <a href="${toRoutePath('student_attendance.html')}" class="nav-subitem${currentPage === 'student_attendance.html' ? ' active' : ''}">
             <i data-lucide="users"></i>
             <span>Student Attendance</span>
         </a>
-        <a href="teacher_attendance.html" class="nav-subitem${currentPage === 'teacher_attendance.html' ? ' active' : ''}">
+        <a href="${toRoutePath('teacher_attendance.html')}" class="nav-subitem${currentPage === 'teacher_attendance.html' ? ' active' : ''}">
             <i data-lucide="user-check"></i>
             <span>Teacher Attendance</span>
         </a>
-        <a href="student_attendance_report.html" class="nav-subitem${currentPage === 'student_attendance_report.html' ? ' active' : ''}">
+        <a href="${toRoutePath('student_attendance_report.html')}" class="nav-subitem${currentPage === 'student_attendance_report.html' ? ' active' : ''}">
             <i data-lucide="file-bar-chart-2"></i>
             <span>Student Attendance Report</span>
         </a>
-        <a href="teacher_attendance_report.html" class="nav-subitem${currentPage === 'teacher_attendance_report.html' ? ' active' : ''}">
+        <a href="${toRoutePath('teacher_attendance_report.html')}" class="nav-subitem${currentPage === 'teacher_attendance_report.html' ? ' active' : ''}">
             <i data-lucide="file-check-2"></i>
             <span>Teacher Attendance Report</span>
         </a>
@@ -1341,11 +1406,13 @@ function ensureNotificationsNav() {
 
     if (!canAccessNotifications) return;
 
-    const currentPage = (window.location.pathname.split('/').pop() || '').toLowerCase();
-    const revenueLink = navLinks.querySelector('a[href="revenue.html"]');
-    const permissionsLink = navLinks.querySelector('a[href="permissions.html"]');
+    const currentPage = getCurrentPageName();
+    const revenueLink = Array.from(navLinks.querySelectorAll('a[href]'))
+        .find((link) => normalizeClientPageName(link.getAttribute('href') || '') === 'revenue.html');
+    const permissionsLink = Array.from(navLinks.querySelectorAll('a[href]'))
+        .find((link) => normalizeClientPageName(link.getAttribute('href') || '') === 'permissions.html');
     const notificationLink = document.createElement('a');
-    notificationLink.href = 'notifications.html';
+    notificationLink.href = toRoutePath('notifications.html');
     notificationLink.className = `nav-item${currentPage === 'notifications.html' ? ' active' : ''}`;
     notificationLink.dataset.notificationsLink = 'true';
     notificationLink.innerHTML = '<i data-lucide="bell-ring"></i><span>Notifications</span>';
@@ -1380,12 +1447,15 @@ function ensureSpecialNoticesNav() {
 
     if (!canAccessSpecialNotices) return;
 
-    const currentPage = (window.location.pathname.split('/').pop() || '').toLowerCase();
-    const notificationsLink = navLinks.querySelector('a[href="notifications.html"]');
-    const revenueLink = navLinks.querySelector('a[href="revenue.html"]');
-    const permissionsLink = navLinks.querySelector('a[href="permissions.html"]');
+    const currentPage = getCurrentPageName();
+    const notificationsLink = Array.from(navLinks.querySelectorAll('a[href]'))
+        .find((link) => normalizeClientPageName(link.getAttribute('href') || '') === 'notifications.html');
+    const revenueLink = Array.from(navLinks.querySelectorAll('a[href]'))
+        .find((link) => normalizeClientPageName(link.getAttribute('href') || '') === 'revenue.html');
+    const permissionsLink = Array.from(navLinks.querySelectorAll('a[href]'))
+        .find((link) => normalizeClientPageName(link.getAttribute('href') || '') === 'permissions.html');
     const noticeLink = document.createElement('a');
-    noticeLink.href = 'special_notices.html';
+    noticeLink.href = toRoutePath('special_notices.html');
     noticeLink.className = `nav-item${currentPage === 'special_notices.html' ? ' active' : ''}`;
     noticeLink.dataset.specialNoticesLink = 'true';
     noticeLink.innerHTML = '<i data-lucide="megaphone"></i><span>Special Notices</span>';
@@ -1486,7 +1556,7 @@ async function resetSystemData(event) {
 
         clearLocalSystemData();
         await showAppAlert('System data has been reset successfully. Please sign in again.', 'Reset Complete');
-        window.location.href = 'index.html';
+        window.location.href = toRoutePath('index.html');
     } catch (error) {
         await showAppAlert(error.message || 'System data could not be reset.', 'Reset Failed');
     }
@@ -1494,7 +1564,7 @@ async function resetSystemData(event) {
 
 function applyBranchScopedStudentsView() {
     const loggedInUser = getLoggedInUser();
-    if (!loggedInUser || loggedInUser.role !== 'Branch' || !window.location.pathname.toLowerCase().includes('students.html')) {
+    if (!loggedInUser || loggedInUser.role !== 'Branch' || !isCurrentPage('students.html')) {
         return;
     }
 
@@ -1505,7 +1575,8 @@ function applyBranchScopedStudentsView() {
 
     document.querySelectorAll('.nav-links .nav-item').forEach((link) => {
         const href = link.getAttribute('href') || '';
-        const keepVisible = href === 'students.html' || href === '#' || href === 'settings.html';
+        const normalizedHref = normalizeClientPageName(href);
+        const keepVisible = href === '#' || normalizedHref === 'students.html' || normalizedHref === 'settings.html';
         link.style.display = keepVisible ? '' : 'none';
     });
 

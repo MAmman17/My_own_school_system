@@ -110,8 +110,6 @@
 })();
 
 (function () {
-    const currentPage = (window.location.pathname.split('/').pop() || 'index.html').toLowerCase();
-    const publicPages = new Set(['index.html', '']);
     const pageRegistry = {
         'dashboard.html': { moduleKey: 'dashboard', defaultHome: 'dashboard.html', label: 'Dashboard', icon: 'layout-dashboard' },
         'students.html': { moduleKey: 'students', defaultHome: 'students.html', label: 'Students', icon: 'users' },
@@ -136,6 +134,46 @@
         'student_portal.html': { moduleKey: 'student_portal', defaultHome: 'student_portal.html', label: 'Student Portal', icon: 'graduation-cap' }
     };
     const portalPages = new Set(['student_portal.html']);
+    const routeToPageMap = Object.keys(pageRegistry).reduce((acc, pageName) => {
+        const cleanKey = pageName.replace(/\.html$/i, '').toLowerCase();
+        acc[cleanKey] = pageName;
+        return acc;
+    }, { login: 'index.html', index: 'index.html' });
+
+    function normalizePageName(pageValue = '') {
+        const rawValue = String(pageValue || '').trim().toLowerCase();
+        if (!rawValue || rawValue === '/' || rawValue === '.') return 'index.html';
+
+        const withoutHash = rawValue.split('#')[0];
+        const withoutQuery = withoutHash.split('?')[0];
+        const trimmedPath = withoutQuery.replace(/^\/+|\/+$/g, '');
+        if (!trimmedPath) return 'index.html';
+
+        const segment = trimmedPath.split('/').pop() || '';
+        if (!segment) return 'index.html';
+
+        if (routeToPageMap[segment]) return routeToPageMap[segment];
+
+        if (segment.endsWith('.html')) {
+            const cleanSegment = segment.replace(/\.html$/i, '');
+            if (routeToPageMap[cleanSegment]) return routeToPageMap[cleanSegment];
+            return segment;
+        }
+
+        const asHtml = `${segment}.html`;
+        if (pageRegistry[asHtml]) return asHtml;
+        return segment;
+    }
+
+    function toRoutePath(pageName = '') {
+        const normalizedPage = normalizePageName(pageName);
+        if (normalizedPage === 'index.html') return '/login';
+        if (pageRegistry[normalizedPage]) return `/${normalizedPage.replace(/\.html$/i, '')}`;
+        return `/${String(pageName || '').replace(/^\/+/, '') || 'login'}`;
+    }
+
+    const currentPage = normalizePageName(window.location.pathname);
+    const publicPages = new Set(['index.html']);
 
     const defaultPermissions = {
         loginAccess: {
@@ -380,7 +418,7 @@
     }
 
     function redirectToAllowedHome(user, permissions) {
-        window.location.replace(getHomePage(user, permissions));
+        window.location.replace(toRoutePath(getHomePage(user, permissions)));
     }
 
     function forceLoginRedirect() {
@@ -388,7 +426,7 @@
         sessionStorage.removeItem('eduCore_token');
         sessionStorage.removeItem('eduCore_student_profile');
         sessionStorage.removeItem('eduCore_permissions_config');
-        window.location.replace('index.html');
+        window.location.replace('/login');
     }
 
     async function fetchPermissionsConfig() {
@@ -415,8 +453,9 @@
         runWhenReady(() => {
             const navLinks = document.querySelectorAll('.nav-links a[href], .user-profile[href]');
             navLinks.forEach((link) => {
-                const href = String(link.getAttribute('href') || '').toLowerCase();
-                if (!href || href === '#') return;
+                const rawHref = String(link.getAttribute('href') || '').trim();
+                if (!rawHref || rawHref === '#') return;
+                const href = normalizePageName(rawHref);
                 if (!pageRegistry[href]) return;
                 if (!canAccessPage(user, permissions, href)) {
                     link.style.display = 'none';
@@ -439,10 +478,10 @@
             if (!grid) return;
 
             const existingCards = Array.from(grid.querySelectorAll('a.card[href]'));
-            const existingPages = new Set(existingCards.map((card) => String(card.getAttribute('href') || '').toLowerCase()));
+            const existingPages = new Set(existingCards.map((card) => normalizePageName(card.getAttribute('href') || '')));
 
             existingCards.forEach((card) => {
-                const href = String(card.getAttribute('href') || '').toLowerCase();
+                const href = normalizePageName(card.getAttribute('href') || '');
                 if (!href || !pageRegistry[href]) return;
                 if (!canAccessPage(user, permissions, href)) {
                     card.remove();
@@ -661,7 +700,7 @@
             .replace(/\b\w/g, (match) => match.toUpperCase());
         const searchableModules = modules.filter((item) => item.pageName !== currentPage);
         const cards = searchableModules.map((item) => `
-            <a href="${escapeHtml(item.pageName)}" class="card" data-portal-module-card>
+            <a href="${escapeHtml(toRoutePath(item.pageName))}" class="card" data-portal-module-card>
                 <div class="card-title">${escapeHtml(getModuleLabel(item))}</div>
                 <div class="card-value">${escapeHtml(getAccessLabel(item.access))}</div>
                 <div class="card-trend trend-up">
@@ -724,7 +763,7 @@
             .replace(/[-_]+/g, ' ')
             .replace(/\b\w/g, (match) => match.toUpperCase());
         const navItems = modules.map((item) => `
-            <a href="${escapeHtml(item.pageName)}" class="nav-item ${item.pageName === currentPage ? 'active' : ''}">
+            <a href="${escapeHtml(toRoutePath(item.pageName))}" class="nav-item ${item.pageName === currentPage ? 'active' : ''}">
                 <i data-lucide="${escapeHtml(item.icon || 'circle')}"></i>
                 <span>${escapeHtml(getModuleLabel(item))}</span>
             </a>
@@ -810,7 +849,7 @@
                 ${modules.length ? `
                     <div class="portal-access-grid">
                         ${modules.map((item) => `
-                            <a class="portal-access-card" href="${escapeHtml(item.pageName)}">
+                            <a class="portal-access-card" href="${escapeHtml(toRoutePath(item.pageName))}">
                                 <span class="portal-access-icon"><i data-lucide="${escapeHtml(item.icon || 'circle')}"></i></span>
                                 <span>
                                     <span class="portal-access-title">${escapeHtml(getModuleLabel(item))}</span>
@@ -876,9 +915,13 @@
     }
 
     window.eduCoreAuth = {
+        currentPage,
         pageRegistry,
         defaultPermissions,
         normalizePermissionsConfig,
+        normalizePageName,
+        resolvePageNameFromPath: normalizePageName,
+        toRoutePath,
         getUserGroupKey,
         getGroupConfig,
         getModuleAccess,
@@ -939,5 +982,5 @@ function logoutUser(event) {
     sessionStorage.removeItem('eduCore_token');
     sessionStorage.removeItem('eduCore_student_profile');
     sessionStorage.removeItem('eduCore_permissions_config');
-    window.location.href = 'index.html';
+    window.location.href = '/login';
 }

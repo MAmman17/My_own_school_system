@@ -77,7 +77,7 @@
             display: flex;
             align-items: center;
             gap: 0.75rem;
-            min-width: 170px;
+            min-width: 120px;
         }
 
         .teacher-name-text {
@@ -89,7 +89,7 @@
         .teacher-login-details {
             line-height: 1.5;
             font-size: 0.85rem;
-            min-width: 180px;
+            min-width: 120px;
         }
 
         .teacher-login-details strong {
@@ -169,6 +169,18 @@
             border-radius: 8px;
             color: var(--text-secondary);
             text-align: center;
+        }
+
+        @media (max-width: 1200px) {
+            .teacher-name-cell {
+                min-width: 100px;
+                gap: 0.5rem;
+            }
+
+            .teacher-login-details {
+                min-width: 100px;
+                font-size: 0.78rem;
+            }
         }
 
         @media (max-width: 900px) {

@@ -922,7 +922,6 @@ tbody tr:hover {
 
 #teachersTable th:nth-child(10) {
     min-width: 150px;
-    text-align: center;
 }
 
 #teachersTable td:nth-child(5) {
@@ -941,7 +940,7 @@ tbody tr:hover {
     text-align: center;
 }
 
-#teachersTable td:nth-child(10) {
+#teachersTable td:nth-child(11) {
     text-align: center;
     white-space: nowrap;
     display: flex;
@@ -1987,7 +1986,7 @@ button {
 
 /* Keep action cells usable without forcing full table overflow */
 #studentsTable td:nth-child(10),
-#teachersTable td:nth-child(10),
+#teachersTable td:nth-child(11),
 #staffTable td:nth-child(11) {
     white-space: normal !important;
     flex-wrap: wrap;
@@ -2065,6 +2064,110 @@ button {
     min-width: 126px !important;
 }
 
+/* Teachers table responsiveness and width tuning */
+#teachersTable th,
+#teachersTable td {
+    padding: 0.66rem 0.5rem !important;
+}
+
+#teachersTable th {
+    white-space: normal !important;
+    line-height: 1.2;
+}
+
+#teachersTable td {
+    font-size: 0.8rem;
+}
+
+#teachersTable th:nth-child(1),
+#teachersTable td:nth-child(1) {
+    min-width: 104px !important;
+}
+
+#teachersTable th:nth-child(2),
+#teachersTable td:nth-child(2) {
+    min-width: 92px !important;
+}
+
+#teachersTable th:nth-child(3),
+#teachersTable td:nth-child(3) {
+    min-width: 72px !important;
+}
+
+#teachersTable th:nth-child(4),
+#teachersTable td:nth-child(4) {
+    min-width: 74px !important;
+}
+
+#teachersTable th:nth-child(5),
+#teachersTable td:nth-child(5) {
+    min-width: 96px !important;
+}
+
+#teachersTable th:nth-child(6),
+#teachersTable td:nth-child(6) {
+    min-width: 90px !important;
+}
+
+#teachersTable th:nth-child(7),
+#teachersTable td:nth-child(7) {
+    min-width: 96px !important;
+}
+
+#teachersTable th:nth-child(8),
+#teachersTable td:nth-child(8) {
+    min-width: 92px !important;
+}
+
+#teachersTable th:nth-child(9),
+#teachersTable td:nth-child(9) {
+    min-width: 80px !important;
+}
+
+#teachersTable th:nth-child(10),
+#teachersTable td:nth-child(10) {
+    min-width: 84px !important;
+}
+
+#teachersTable th:nth-child(11),
+#teachersTable td:nth-child(11) {
+    min-width: 106px !important;
+}
+
+@media (max-width: 1200px) {
+    #teachersTable th,
+    #teachersTable td {
+        padding: 0.58rem 0.44rem !important;
+        font-size: 0.74rem;
+    }
+
+    #teachersTable th:nth-child(1),
+    #teachersTable td:nth-child(1) {
+        min-width: 94px !important;
+    }
+
+    #teachersTable th:nth-child(5),
+    #teachersTable td:nth-child(5),
+    #teachersTable th:nth-child(6),
+    #teachersTable td:nth-child(6),
+    #teachersTable th:nth-child(7),
+    #teachersTable td:nth-child(7),
+    #teachersTable th:nth-child(8),
+    #teachersTable td:nth-child(8) {
+        min-width: 88px !important;
+    }
+
+    #teachersTable th:nth-child(10),
+    #teachersTable td:nth-child(10) {
+        min-width: 76px !important;
+    }
+
+    #teachersTable th:nth-child(11),
+    #teachersTable td:nth-child(11) {
+        min-width: 96px !important;
+    }
+}
+
 @media (max-width: 1100px) {
     #studentsTable th,
     #studentsTable td {
@@ -2085,6 +2188,38 @@ button {
     #studentsTable th:nth-child(10),
     #studentsTable td:nth-child(10) {
         min-width: 116px !important;
+    }
+
+    #teachersTable th,
+    #teachersTable td {
+        font-size: 0.72rem;
+        padding: 0.5rem 0.38rem !important;
+    }
+
+    #teachersTable th:nth-child(1),
+    #teachersTable td:nth-child(1) {
+        min-width: 88px !important;
+    }
+
+    #teachersTable th:nth-child(2),
+    #teachersTable td:nth-child(2) {
+        min-width: 82px !important;
+    }
+
+    #teachersTable th:nth-child(5),
+    #teachersTable td:nth-child(5),
+    #teachersTable th:nth-child(6),
+    #teachersTable td:nth-child(6),
+    #teachersTable th:nth-child(7),
+    #teachersTable td:nth-child(7),
+    #teachersTable th:nth-child(8),
+    #teachersTable td:nth-child(8) {
+        min-width: 82px !important;
+    }
+
+    #teachersTable th:nth-child(11),
+    #teachersTable td:nth-child(11) {
+        min-width: 88px !important;
     }
 }
 

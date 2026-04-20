@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Special Notices - Apexiums School management</title>
+    <title>Special Notices - My own Science school</title>
     <link rel="stylesheet" href="style.css">
     <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
     <script src="https://unpkg.com/lucide@latest"></script>
@@ -85,7 +85,7 @@
 
         .notice-preview-header {
             display: grid;
-            grid-template-columns: 82px 1fr 82px;
+            grid-template-columns: 82px 1fr;
             align-items: center;
             gap: 1rem;
             text-align: center;
@@ -266,10 +266,9 @@
                         <div class="notice-preview-header">
                             <img class="notice-logo" src="images/logo.jpeg" alt="School logo">
                             <div>
-                                <h2>Apexiums School System</h2>
+                                <h2>My own Science school</h2>
                                 <p>Official Special Notice</p>
                             </div>
-                            <img class="notice-logo" src="images/logo.jpeg" alt="School logo">
                         </div>
                         <div class="notice-preview-title" id="previewTitle">Notice Title</div>
                         <div class="notice-preview-message" id="previewMessage">Write a notice to preview the printable format.</div>
@@ -356,7 +355,7 @@
                     <style>
                         body { font-family: Arial, sans-serif; color: #111827; padding: 36px; }
                         .sheet { border: 1px solid #64748b; padding: 32px; min-height: 82vh; }
-                        .head { display: grid; grid-template-columns: 82px 1fr 82px; align-items: center; gap: 16px; text-align: center; border-bottom: 2px solid #0f766e; padding-bottom: 16px; margin-bottom: 28px; }
+                        .head { display: grid; grid-template-columns: 82px 1fr; align-items: center; gap: 16px; text-align: center; border-bottom: 2px solid #0f766e; padding-bottom: 16px; margin-bottom: 28px; }
                         .logo { width: 72px; height: 72px; object-fit: contain; margin: 0 auto; }
                         h1 { color: #0f766e; margin: 0 0 6px; font-size: 24px; }
                         h2 { text-align: center; margin: 0 0 24px; font-size: 22px; }
@@ -368,8 +367,7 @@
                     <div class="sheet">
                         <div class="head">
                             <img class="logo" src="images/logo.jpeg" alt="School logo">
-                            <div><h1>Apexiums School System</h1><div>Official Special Notice</div></div>
-                            <img class="logo" src="images/logo.jpeg" alt="School logo">
+                            <div><h1>My own Science school</h1><div>Official Special Notice</div></div>
                         </div>
                         <h2>${escapeHtml(draft.title)}</h2>
                         <div class="message">${escapeHtml(draft.message)}</div>

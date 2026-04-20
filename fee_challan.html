@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Fee Challan Generator - Apexiums School management</title>
+    <title>Fee Challan Generator - My own Science school</title>
     <link rel="stylesheet" href="style.css">
     <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
     <script src="https://unpkg.com/lucide@latest"></script>
@@ -328,27 +328,162 @@
             color: var(--challan-accent);
         }
 
+        .class-students-overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(15, 23, 42, 0.45);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 1200;
+            padding: 1rem;
+        }
+
+        .class-students-overlay.active {
+            display: flex;
+        }
+
+        .class-students-modal {
+            width: min(640px, 100%);
+            max-height: 80vh;
+            background: #fff;
+            border-radius: 0.9rem;
+            border: 1px solid #dbe4ee;
+            box-shadow: 0 20px 50px rgba(15, 23, 42, 0.2);
+            overflow: hidden;
+            display: grid;
+            grid-template-rows: auto auto 1fr auto;
+        }
+
+        .class-students-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 0.75rem;
+            padding: 0.9rem 1rem;
+            border-bottom: 1px solid #e2e8f0;
+        }
+
+        .class-students-header h3 {
+            margin: 0;
+            font-size: 1rem;
+            color: var(--challan-text);
+        }
+
+        .class-students-header button {
+            border: none;
+            background: #f1f5f9;
+            border-radius: 0.45rem;
+            width: 32px;
+            height: 32px;
+            cursor: pointer;
+            font-size: 1rem;
+            color: #334155;
+        }
+
+        .class-students-search {
+            padding: 0.75rem 1rem;
+            border-bottom: 1px solid #e2e8f0;
+        }
+
+        .class-students-search input {
+            width: 100%;
+            min-height: 42px;
+            border: 1px solid #cbd5e1;
+            border-radius: 0.5rem;
+            padding: 0.7rem 0.8rem;
+            font: inherit;
+        }
+
+        .class-students-list {
+            overflow: auto;
+            padding: 0.4rem;
+            display: grid;
+            gap: 0.35rem;
+        }
+
+        .class-student-item {
+            border: 1px solid #dbe4ee;
+            border-radius: 0.55rem;
+            background: #f8fbff;
+            padding: 0.7rem 0.8rem;
+            cursor: pointer;
+            display: grid;
+            gap: 0.25rem;
+            text-align: left;
+            width: 100%;
+        }
+
+        .class-student-item:hover {
+            border-color: #93c5fd;
+            background: #eff6ff;
+        }
+
+        .class-student-item strong {
+            color: #0f172a;
+            font-size: 0.92rem;
+        }
+
+        .class-student-item span {
+            color: #475569;
+            font-size: 0.8rem;
+        }
+
+        .student-status-badge {
+            justify-self: start;
+            padding: 2px 8px;
+            border-radius: 999px;
+            font-size: 0.72rem;
+            font-weight: 700;
+        }
+
+        .student-status-badge.paid {
+            background: #dcfce7;
+            color: #166534;
+        }
+
+        .student-status-badge.pending {
+            background: #fef3c7;
+            color: #92400e;
+        }
+
+        .class-students-empty {
+            padding: 1rem;
+            text-align: center;
+            color: #64748b;
+            font-size: 0.86rem;
+        }
+
+        .class-students-footer {
+            border-top: 1px solid #e2e8f0;
+            padding: 0.7rem 1rem;
+            display: flex;
+            justify-content: flex-end;
+        }
+
         .qr-preview-card {
             margin-top: 1rem;
-            padding: 1rem;
+            padding: 0.8rem;
             border: 1px dashed #cbd5e1;
-            border-radius: 0.9rem;
+            border-radius: 0.8rem;
             background: #f8fbff;
             display: grid;
-            grid-template-columns: 140px 1fr;
-            gap: 1rem;
+            grid-template-columns: 110px 1fr;
+            gap: 0.8rem;
             align-items: center;
         }
 
         .qr-preview-image {
-            width: 140px;
-            height: 140px;
+            width: 110px;
+            height: 110px;
             border: 1px solid #cbd5e1;
-            border-radius: 0.8rem;
+            border-radius: 0.65rem;
             background: #fff;
             display: grid;
             place-items: center;
             overflow: hidden;
+            font-size: 0.78rem;
+            color: var(--challan-soft);
         }
 
         .qr-preview-image img {
@@ -359,36 +494,38 @@
         }
 
         .qr-preview-copy h4 {
-            margin: 0 0 0.45rem;
+            margin: 0 0 0.4rem;
             color: var(--challan-text);
+            font-size: 0.95rem;
         }
 
         .qr-preview-copy p,
         .qr-preview-copy a {
-            font-size: 0.82rem;
-            line-height: 1.6;
+            font-size: 0.8rem;
+            line-height: 1.5;
             color: var(--challan-soft);
             word-break: break-all;
         }
 
         .challan-qr-cell {
             text-align: center;
-            width: 140px;
+            width: 90px;
         }
 
         .challan-qr-cell img {
-            width: 110px;
-            height: 110px;
+            width: 84px;
+            height: 84px;
             object-fit: contain;
             display: block;
-            margin: 0 auto 6px;
+            margin: 0 auto;
         }
 
         .challan-qr-note {
             font-size: 10px;
             color: #334155;
-            line-height: 1.45;
+            line-height: 1.4;
         }
+
 
         .form-actions-row {
             display: flex;
@@ -423,9 +560,15 @@
             .qr-preview-card {
                 grid-template-columns: 1fr;
             }
+
         }
 
         @media print {
+            @page {
+                size: A4;
+                margin: 4mm;
+            }
+
             body {
                 background: #fff;
             }
@@ -447,7 +590,7 @@
 
             .preview-print-sheet {
                 display: block;
-                padding: 10mm;
+                padding: 0;
                 font-family: 'Inter', sans-serif;
             }
 
@@ -455,10 +598,72 @@
                 border: none;
                 margin: 0;
                 break-inside: avoid;
+                page-break-inside: avoid;
+                page-break-after: avoid;
+            }
+
+            .preview-sheet + .preview-sheet {
+                margin-top: 1.2mm;
             }
 
             .challan-paper {
-                padding: 0 0 10px;
+                padding: 0 0 1mm;
+            }
+
+            .challan-copy-label {
+                font-size: 9px;
+                margin-bottom: 2px;
+            }
+
+            .challan-table {
+                font-size: 10px;
+            }
+
+            .challan-table td,
+            .challan-table th {
+                padding: 4px 5px;
+            }
+
+            .challan-school-mark {
+                width: 66px;
+            }
+
+            .challan-school-logo {
+                width: 42px;
+                height: 42px;
+            }
+
+            .challan-school-title {
+                font-size: 13px;
+            }
+
+            .challan-school-subtitle {
+                font-size: 10px;
+            }
+
+            .challan-urdu-note {
+                font-size: 9px;
+                min-height: 16px;
+            }
+
+            .challan-qr-cell {
+                width: 70px;
+            }
+
+            .challan-qr-cell img {
+                width: 56px;
+                height: 56px;
+            }
+
+            .challan-qr-note {
+                font-size: 8px;
+                line-height: 1.25;
+            }
+
+            .challan-footer {
+                gap: 8px;
+                font-size: 10px;
+                padding: 6px 2px 0;
             }
         }
     </style>
@@ -521,20 +726,22 @@
                                     <div class="field-help">Enter a student ID or roll number to auto-fill the form.</div>
                                 </div>
                                 <div class="field-block">
+                                    <label for="challanClassFilter">Select Class</label>
+                                    <select id="challanClassFilter">
+                                        <option value="">All Classes</option>
+                                    </select>
+                                </div>
+                                <div class="field-block">
                                     <label for="challanStudent">Student Name</label>
                                     <select id="challanStudent"></select>
                                 </div>
                                 <div class="field-block">
                                     <label for="studentSid">SID</label>
-                                    <input type="text" id="studentSid" placeholder="392">
+                                    <input type="text" id="studentSid" placeholder="Student ID" readonly>
                                 </div>
                                 <div class="field-block">
                                     <label for="studentAdmNo">Admission No</label>
-                                    <input type="text" id="studentAdmNo" placeholder="668B">
-                                </div>
-                                <div class="field-block">
-                                    <label for="familyNo">Family No</label>
-                                    <input type="text" id="familyNo" placeholder="744">
+                                    <input type="text" id="studentAdmNo" placeholder="Student ID" readonly>
                                 </div>
                                 <div class="field-block">
                                     <label for="studentClass">Class / Section</label>
@@ -590,7 +797,7 @@
                                 </div>
                                 <div class="field-block">
                                     <label for="schoolName">School Name</label>
-                                    <input type="text" id="schoolName" placeholder="MY OWN SCIENCE SCHOOL JAND">
+                                    <input type="text" id="schoolName" placeholder="My own Science school">
                                 </div>
                                 <div class="field-block full">
                                     <label for="schoolAddress">Address / Campus</label>
@@ -609,7 +816,7 @@
                                 <button class="btn btn-outline" type="button" onclick="resetChallanForm()">
                                     <i data-lucide="refresh-cw" size="16"></i>&nbsp;Refresh Preview
                                 </button>
-                                <button class="btn btn-primary" type="button" onclick="window.print()">
+                                <button class="btn btn-primary" type="button" id="printChallanBtn" onclick="window.print()">
                                     <i data-lucide="printer" size="16"></i>&nbsp;Print Challan
                                 </button>
                             </div>
@@ -634,7 +841,7 @@
                                     <div class="qr-preview-image" id="qrPreviewImage">QR</div>
                                     <div class="qr-preview-copy">
                                         <h4>QR Payment Scan</h4>
-                                        <p id="qrPreviewStatus">Select a student to generate a payment QR code.</p>
+                                        <p id="qrPreviewStatus">Select student and fee month to generate QR.</p>
                                         <a id="qrPreviewLink" href="#" target="_blank" rel="noopener" style="display:none;"></a>
                                     </div>
                                 </div>
@@ -646,6 +853,21 @@
 
             <div class="preview-print-sheet" id="printSheet"></div>
         </main>
+    </div>
+    <div class="class-students-overlay" id="classStudentsOverlay">
+        <div class="class-students-modal">
+            <div class="class-students-header">
+                <h3 id="classStudentsModalTitle">Select Student</h3>
+                <button type="button" onclick="hideClassStudentsPopup()" aria-label="Close">x</button>
+            </div>
+            <div class="class-students-search">
+                <input type="text" id="classStudentsSearch" placeholder="Search by name, roll number, or student ID">
+            </div>
+            <div class="class-students-list" id="classStudentsList"></div>
+            <div class="class-students-footer">
+                <button type="button" class="btn btn-outline" onclick="hideClassStudentsPopup()">Cancel</button>
+            </div>
+        </div>
     </div>
 
     <script src="auth.js"></script>
@@ -665,7 +887,7 @@
                 addressLine: 'Address: Nai Abadi. Phone: 03085259900'
             }
         };
-        const challanFormFields = ['challanNumber', 'challanStudent', 'studentSid', 'studentAdmNo', 'familyNo', 'studentClass', 'studentRollNo', 'fatherName', 'fatherMobile', 'challanSession', 'challanMonth', 'feeMonth', 'dueDate', 'baseAmount', 'additionalCharges', 'discountValue', 'particulars', 'schoolName', 'schoolAddress', 'urduNote', 'challanNotes'];
+        const challanFormFields = ['challanNumber', 'challanStudent', 'studentSid', 'studentAdmNo', 'studentClass', 'studentRollNo', 'fatherName', 'fatherMobile', 'challanSession', 'challanMonth', 'feeMonth', 'dueDate', 'baseAmount', 'additionalCharges', 'discountValue', 'particulars', 'schoolName', 'schoolAddress', 'urduNote', 'challanNotes'];
         const printCopies = ['School Copy', 'Student Copy'];
         const CHALLAN_MONTHLY_FEES_KEY = 'eduCore_monthly_fees';
         const CHALLAN_MONTHS = [
@@ -676,10 +898,18 @@
         let challanQrState = {
             paymentUrl: '',
             qrImageUrl: '',
-            status: 'Select a student to generate a payment QR code.'
+            status: 'Select student and fee month to generate QR.'
         };
         let challanQrTimer = null;
         let challanQrRequestId = 0;
+        let challanPaymentSyncTimer = null;
+        let classPopupStudents = [];
+        const CHALLAN_FALLBACK_CLASSES = [
+            'Play Group', 'Nursery', 'Prep',
+            'Class 1', 'Class 2', 'Class 3', 'Class 4', 'Class 5',
+            'Class 6', 'Class 7', 'Class 8', 'Class 9', 'Class 10',
+            'Graduate'
+        ];
 
         document.addEventListener('DOMContentLoaded', () => {
             initializeChallanPage();
@@ -688,6 +918,7 @@
 
         async function initializeChallanPage() {
             await loadChallanStudents();
+            populateClassFilter();
             populateStudents();
             setChallanDefaults();
             challanFormFields.forEach(id => {
@@ -696,12 +927,42 @@
                 field.addEventListener('input', handleChallanFieldUpdate);
                 field.addEventListener('change', handleStudentChange);
             });
+            const classFilter = document.getElementById('challanClassFilter');
+            if (classFilter) {
+                classFilter.addEventListener('change', handleClassFilterChange);
+            }
             const studentLookup = document.getElementById('studentLookup');
             if (studentLookup) {
                 studentLookup.addEventListener('input', handleStudentLookup);
                 studentLookup.addEventListener('change', handleStudentLookup);
             }
+            const popupSearch = document.getElementById('classStudentsSearch');
+            if (popupSearch) {
+                popupSearch.addEventListener('input', renderClassStudentsPopupList);
+            }
+            const popupOverlay = document.getElementById('classStudentsOverlay');
+            if (popupOverlay) {
+                popupOverlay.addEventListener('click', (event) => {
+                    if (event.target === popupOverlay) hideClassStudentsPopup();
+                });
+            }
+            document.addEventListener('keydown', (event) => {
+                if (event.key === 'Escape') hideClassStudentsPopup();
+            });
             triggerChallanRefresh();
+            startChallanPaymentSync();
+        }
+
+        function startChallanPaymentSync() {
+            if (challanPaymentSyncTimer) return;
+            challanPaymentSyncTimer = setInterval(async () => {
+                await mergeChallanFeePaymentsIntoMonthlyStore();
+                const selectedStudent = getSelectedChallanStudent();
+                if (selectedStudent) {
+                    applyStudentToChallan(selectedStudent, false);
+                    triggerChallanRefresh();
+                }
+            }, 15000);
         }
 
         async function loadChallanStudents() {
@@ -716,6 +977,88 @@
                 challanStudents = [...getData(STORAGE_KEY_STUDENTS)].sort((a, b) => (a.fullName || '').localeCompare(b.fullName || ''));
             }
             await mergeChallanFeePaymentsIntoMonthlyStore();
+        }
+
+        function normalizeClassLabel(value) {
+            return String(value || '').trim();
+        }
+
+        function getClassKey(value) {
+            const normalized = normalizeClassLabel(value).toLowerCase().replace(/\s+/g, ' ');
+            if (!normalized) return '';
+            const withoutPrefix = normalized.startsWith('class ') ? normalized.slice(6).trim() : normalized;
+            const aliasMap = {
+                'play group': 'play',
+                'playgroup': 'play',
+                'pg': 'play',
+                'prep': 'prep',
+                'nursery': 'nursery',
+                'one': '1',
+                'two': '2',
+                'three': '3',
+                'four': '4',
+                'five': '5',
+                'six': '6',
+                'seven': '7',
+                'eight': '8',
+                'nine': '9',
+                'ten': '10',
+                'graduate': 'graduate',
+                'graduated': 'graduate'
+            };
+            return aliasMap[withoutPrefix] || withoutPrefix;
+        }
+
+        function isLikelyClassLabel(value) {
+            const label = normalizeClassLabel(value);
+            if (!label) return false;
+            if (/^(std|stu|tch|stf|cls|branch)[-_]/i.test(label)) return false;
+            if (/^[a-z]{3}-[a-f0-9-]{6,}$/i.test(label)) return false;
+            return true;
+        }
+
+        function getAvailableChallanClasses() {
+            const storedClasses = getData(STORAGE_KEY_CLASSES);
+            const sourceClasses = [...CHALLAN_FALLBACK_CLASSES];
+
+            if (Array.isArray(storedClasses) && storedClasses.length) {
+                storedClasses.forEach((item) => {
+                    const className = normalizeClassLabel(item?.name || item?.className || item?.title || '');
+                    if (isLikelyClassLabel(className)) sourceClasses.push(className);
+                });
+            }
+            challanStudents.forEach((student) => {
+                const className = normalizeClassLabel(student?.classGrade || '');
+                if (isLikelyClassLabel(className)) sourceClasses.push(className);
+            });
+
+            const uniqueByKey = new Map();
+            sourceClasses.forEach((className) => {
+                const key = getClassKey(className);
+                if (key && !uniqueByKey.has(key)) {
+                    uniqueByKey.set(key, className);
+                }
+            });
+
+            return Array.from(uniqueByKey.values()).sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+        }
+
+        function populateClassFilter(selectedClass = '') {
+            const classFilter = document.getElementById('challanClassFilter');
+            if (!classFilter) return;
+
+            const currentSelection = selectedClass || classFilter.value || '';
+            const classList = getAvailableChallanClasses();
+
+            classFilter.innerHTML = '<option value="">All Classes</option>';
+            classList.forEach((className) => {
+                const option = document.createElement('option');
+                option.value = className;
+                option.textContent = className;
+                classFilter.appendChild(option);
+            });
+
+            classFilter.value = classList.includes(currentSelection) ? currentSelection : '';
         }
 
         function getChallanLongMonthName(value) {
@@ -751,18 +1094,121 @@
 
         function populateStudents() {
             const select = document.getElementById('challanStudent');
+            const filteredStudents = getFilteredChallanStudentsBySelectedClass();
+
             select.innerHTML = '';
-            if (!challanStudents.length) {
+            if (!filteredStudents.length) {
                 select.innerHTML = '<option value="">No students available</option>';
                 return;
             }
             select.innerHTML = '<option value="">Select student</option>';
-            challanStudents.forEach(student => {
+            filteredStudents.forEach(student => {
                 const option = document.createElement('option');
                 option.value = student.id;
                 option.textContent = student.fullName || 'Unnamed Student';
                 select.appendChild(option);
             });
+        }
+
+        function getFilteredChallanStudentsBySelectedClass() {
+            const classFilter = document.getElementById('challanClassFilter');
+            const selectedClass = normalizeClassLabel(classFilter ? classFilter.value : '');
+            const selectedClassKey = getClassKey(selectedClass);
+            return selectedClass
+                ? challanStudents.filter((student) => getClassKey(student.classGrade) === selectedClassKey)
+                : challanStudents;
+        }
+
+        function handleClassFilterChange() {
+            const selectedStudentId = document.getElementById('challanStudent').value;
+            populateStudents();
+            const filteredStudents = getFilteredChallanStudentsBySelectedClass();
+            const studentSelect = document.getElementById('challanStudent');
+            const optionExists = Array.from(studentSelect.options).some((option) => option.value === selectedStudentId);
+            const classFilter = document.getElementById('challanClassFilter');
+            const selectedClass = normalizeClassLabel(classFilter ? classFilter.value : '');
+
+            if (selectedStudentId && optionExists) {
+                studentSelect.value = selectedStudentId;
+                const student = challanStudents.find((item) => item.id === selectedStudentId);
+                applyStudentToChallan(student, false);
+            } else {
+                studentSelect.value = '';
+                document.getElementById('studentClass').value = '';
+                document.getElementById('studentRollNo').value = '';
+                document.getElementById('studentSid').value = '';
+                document.getElementById('studentAdmNo').value = '';
+                document.getElementById('fatherName').value = '';
+                document.getElementById('fatherMobile').value = '';
+                updateChallanPaidStateUI(false);
+            }
+
+            if (selectedClass && filteredStudents.length) {
+                showClassStudentsPopup(selectedClass, filteredStudents);
+            } else {
+                hideClassStudentsPopup();
+            }
+
+            triggerChallanRefresh();
+        }
+
+        function showClassStudentsPopup(className, students) {
+            const overlay = document.getElementById('classStudentsOverlay');
+            const title = document.getElementById('classStudentsModalTitle');
+            const searchInput = document.getElementById('classStudentsSearch');
+            if (!overlay || !title) return;
+
+            classPopupStudents = Array.isArray(students) ? [...students] : [];
+            title.textContent = `${className} Students`;
+            if (searchInput) searchInput.value = '';
+            renderClassStudentsPopupList();
+            overlay.classList.add('active');
+        }
+
+        function hideClassStudentsPopup() {
+            const overlay = document.getElementById('classStudentsOverlay');
+            if (!overlay) return;
+            overlay.classList.remove('active');
+        }
+
+        function renderClassStudentsPopupList() {
+            const list = document.getElementById('classStudentsList');
+            const searchInput = document.getElementById('classStudentsSearch');
+            if (!list) return;
+
+            const term = String(searchInput?.value || '').trim().toLowerCase();
+            const visibleStudents = classPopupStudents.filter((student) => {
+                if (!term) return true;
+                return String(student.fullName || '').toLowerCase().includes(term) ||
+                    String(student.rollNo || '').toLowerCase().includes(term) ||
+                    String(student.studentCode || '').toLowerCase().includes(term) ||
+                    String(student.id || '').toLowerCase().includes(term);
+            });
+
+            if (!visibleStudents.length) {
+                list.innerHTML = '<div class="class-students-empty">No students found for this class.</div>';
+                return;
+            }
+
+            list.innerHTML = visibleStudents.map((student) => `
+                <button type="button" class="class-student-item" onclick="selectStudentFromClassPopup(decodeURIComponent('${encodeURIComponent(student.id)}'))">
+                    <strong>${escapeHtml(student.fullName || 'Unnamed Student')}</strong>
+                    <span>Roll: ${escapeHtml(student.rollNo || '-')} | ID: ${escapeHtml(student.studentCode || student.id || '-')}</span>
+                    <span class="student-status-badge ${isStudentFeePaid(student) ? 'paid' : 'pending'}">${isStudentFeePaid(student) ? 'Paid' : 'Pending'}</span>
+                </button>
+            `).join('');
+        }
+
+        function selectStudentFromClassPopup(studentId) {
+            const student = challanStudents.find((item) => item.id === studentId);
+            if (!student) return;
+
+            populateStudents();
+            const studentSelect = document.getElementById('challanStudent');
+            if (studentSelect) studentSelect.value = student.id;
+            applyStudentToChallan(student, true);
+            hideClassStudentsPopup();
+            triggerChallanRefresh();
         }
 
         function getChallanBranchContactDetails(campusName) {
@@ -786,7 +1232,7 @@
             document.getElementById('challanMonth').value = now.toLocaleDateString('en-GB', { month: 'short', year: 'numeric' }).replace(' ', ', ');
             document.getElementById('feeMonth').value = now.toLocaleDateString('en-GB', { month: 'short', year: 'numeric' }).replace(' ', ', ');
             document.getElementById('particulars').value = 'Tuition Fee';
-            document.getElementById('schoolName').value = 'MY OWN SCIENCE SCHOOL JAND';
+            document.getElementById('schoolName').value = 'My own Science school';
             applyBranchDetailsToChallan('Main branch');
             document.getElementById('urduNote').value = 'Note: Fees will not be accepted after the due date.';
             document.getElementById('challanNotes').value = 'No additional instructions.';
@@ -795,7 +1241,11 @@
         function handleStudentChange(event) {
             if (event.target.id === 'challanStudent') {
                 const student = challanStudents.find(item => item.id === event.target.value);
-                applyStudentToChallan(student, true);
+                if (student) {
+                    applyStudentToChallan(student, true);
+                } else {
+                    updateChallanPaidStateUI(false);
+                }
             }
             triggerChallanRefresh();
         }
@@ -819,6 +1269,8 @@
                 return;
             }
 
+            populateClassFilter(student.classGrade || '');
+            populateStudents();
             document.getElementById('challanStudent').value = student.id;
             applyStudentToChallan(student, true);
             triggerChallanRefresh();
@@ -827,23 +1279,49 @@
         function applyStudentToChallan(student, syncLookup = false) {
             if (!student) return;
             const feeSummary = getChallanStudentFeeSummary(student);
+            const generatedStudentId = student.studentCode || student.id || student.rollNo || '';
+            const isPaid = isStudentFeePaid(student, feeSummary);
 
             document.getElementById('studentClass').value = student.classGrade || '';
             document.getElementById('studentRollNo').value = student.rollNo || '';
-            document.getElementById('studentSid').value = student.studentCode || student.rollNo || '';
-            document.getElementById('studentAdmNo').value = student.admissionNo || '';
-            document.getElementById('familyNo').value = student.familyNo || '';
+            document.getElementById('studentSid').value = generatedStudentId;
+            document.getElementById('studentAdmNo').value = generatedStudentId;
             document.getElementById('fatherName').value = student.fatherName || '';
             document.getElementById('fatherMobile').value = student.parentPhone || student.phone || student.fatherMobile || '';
             applyBranchDetailsToChallan(student.campusName);
-            document.getElementById('feeMonth').value = feeSummary.pendingMonths.join(', ');
-            document.getElementById('baseAmount').value = feeSummary.pendingAmount || student.monthlyFee || 0;
-            document.getElementById('particulars').value = feeSummary.pendingMonths.length > 1 ? 'Pending Tuition Fee' : 'Tuition Fee';
+            document.getElementById('feeMonth').value = isPaid ? 'Paid' : (feeSummary.pendingMonths.join(', ') || CHALLAN_MONTHS[new Date().getMonth()]);
+            document.getElementById('baseAmount').value = isPaid ? 0 : feeSummary.pendingAmount;
+            document.getElementById('additionalCharges').value = isPaid ? 0 : Number(document.getElementById('additionalCharges').value || 0);
+            document.getElementById('discountValue').value = isPaid ? '0' : document.getElementById('discountValue').value;
+            document.getElementById('particulars').value = isPaid
+                ? 'Fee Already Paid'
+                : (feeSummary.pendingMonths.length > 1 ? 'Pending Tuition Fee' : 'Tuition Fee');
             renderStudentFeeSnapshot(student, feeSummary);
+            updateChallanPaidStateUI(isPaid);
 
             if (syncLookup) {
-                document.getElementById('studentLookup').value = student.studentCode || student.rollNo || '';
+                document.getElementById('studentLookup').value = generatedStudentId;
             }
+        }
+
+        function isStudentFeePaid(student, summary = getChallanStudentFeeSummary(student)) {
+            const explicitPaid = String(student?.feesStatus || '').toLowerCase() === 'paid';
+            const noPending = !summary.pendingMonths.length || summary.pendingAmount <= 0;
+            return explicitPaid && noPending;
+        }
+
+        function updateChallanPaidStateUI(isPaid) {
+            const printBtn = document.getElementById('printChallanBtn');
+            if (!printBtn) return;
+
+            printBtn.disabled = !!isPaid;
+            printBtn.style.opacity = isPaid ? '0.6' : '1';
+            printBtn.style.cursor = isPaid ? 'not-allowed' : 'pointer';
+            printBtn.innerHTML = isPaid
+                ? '<i data-lucide="check-circle-2" size="16"></i>&nbsp;Paid - Challan Not Required'
+                : '<i data-lucide="printer" size="16"></i>&nbsp;Print Challan';
+
+            if (window.lucide && window.lucide.createIcons) window.lucide.createIcons();
         }
 
         function getChallanStudentFeeSummary(student) {
@@ -898,9 +1376,11 @@
         function renderStudentFeeSnapshot(student, summary = getChallanStudentFeeSummary(student)) {
             const snapshot = document.getElementById('studentFeeSnapshot');
             if (!snapshot) return;
+            const statusLabel = isStudentFeePaid(student, summary) ? 'Paid' : 'Pending';
 
             snapshot.innerHTML = `
                 <div><strong>${escapeHtml(student.fullName || 'Student')}</strong> | Roll No: ${escapeHtml(student.rollNo || '-')} | Class: ${escapeHtml(student.classGrade || '-')}</div>
+                <div>Status: <strong>${escapeHtml(statusLabel)}</strong></div>
                 <div>Admission Month: <strong>${escapeHtml(summary.admissionMonth || '-')}</strong></div>
                 <div>Monthly Fee: <strong>PKR ${summary.monthlyFee.toLocaleString('en-PK')}</strong></div>
                 <div>Paid Months: ${summary.paidMonths.length ? escapeHtml(summary.paidMonths.join(', ')) : 'None'}</div>
@@ -911,18 +1391,21 @@
 
         function resetChallanForm() {
             document.getElementById('challanForm').reset();
+            const classFilter = document.getElementById('challanClassFilter');
+            if (classFilter) classFilter.value = '';
+            populateStudents();
             document.getElementById('challanStudent').value = '';
             document.getElementById('studentLookup').value = '';
             document.getElementById('studentClass').value = '';
             document.getElementById('studentRollNo').value = '';
             document.getElementById('studentSid').value = '';
             document.getElementById('studentAdmNo').value = '';
-            document.getElementById('familyNo').value = '';
             document.getElementById('fatherName').value = '';
             document.getElementById('fatherMobile').value = '';
             document.getElementById('baseAmount').value = '';
             document.getElementById('additionalCharges').value = 0;
             document.getElementById('studentFeeSnapshot').textContent = 'Select a student or enter roll number to view pending fee details.';
+            updateChallanPaidStateUI(false);
             setChallanDefaults();
             triggerChallanRefresh();
         }
@@ -937,11 +1420,11 @@
             challanQrState = {
                 paymentUrl: '',
                 qrImageUrl: '',
-                status: qrBlockReason || 'Generating payment QR code...'
+                status: qrBlockReason || 'Generating payment QR...'
             };
             renderChallanPreview();
             clearTimeout(challanQrTimer);
-            challanQrTimer = setTimeout(refreshChallanQr, 250);
+            challanQrTimer = setTimeout(refreshChallanQr, 220);
         }
 
         async function refreshChallanQr() {
@@ -963,7 +1446,7 @@
             challanQrState = {
                 paymentUrl: '',
                 qrImageUrl: '',
-                status: 'Generating payment QR code...'
+                status: `Scanning will automatically mark ${data.feeMonth} fee as paid.`
             };
             renderQrPreviewBlock();
             renderChallanPreview();
@@ -984,25 +1467,17 @@
                     })
                 });
 
-                const responseText = await response.text();
-                let result = {};
-
-                try {
-                    result = responseText ? JSON.parse(responseText) : {};
-                } catch (parseError) {
-                    result = {};
-                }
-
+                const result = await response.json();
                 if (requestId !== challanQrRequestId) return;
 
-                if (!response.ok || !result.success || !result.paymentUrl) {
-                    throw new Error(result.message || 'QR code could not be generated.');
+                if (!response.ok || !result?.success || !result?.paymentUrl) {
+                    throw new Error(result?.message || 'QR code could not be generated.');
                 }
 
                 challanQrState = {
                     paymentUrl: result.paymentUrl,
                     qrImageUrl: result.qrDataUrl || '',
-                    status: `Scanning this QR code will mark ${data.studentName}'s ${data.feeMonth} fee as paid.`
+                    status: `Scanning this QR code will automatically mark ${data.feeMonth} fee as paid.`
                 };
             } catch (error) {
                 if (requestId !== challanQrRequestId) return;
@@ -1058,8 +1533,7 @@
                 challanNumber: document.getElementById('challanNumber').value.trim() || '-',
                 studentName: selectedStudent ? selectedStudent.fullName : 'Student 1',
                 sid: document.getElementById('studentSid').value.trim() || '-',
-                admissionNo: document.getElementById('studentAdmNo').value.trim() || '-',
-                familyNo: document.getElementById('familyNo').value.trim() || '-',
+                admissionNo: selectedStudent ? (selectedStudent.studentCode || selectedStudent.id || selectedStudent.rollNo || '-') : '-',
                 classSection: document.getElementById('studentClass').value.trim() || '-',
                 rollNo: document.getElementById('studentRollNo').value.trim() || '-',
                 fatherName: document.getElementById('fatherName').value.trim() || '-',
@@ -1073,7 +1547,7 @@
                 discountLabel: discountInput || '0',
                 discountAmount,
                 particulars: document.getElementById('particulars').value.trim() || 'Tuition Fee',
-                schoolName: document.getElementById('schoolName').value.trim() || 'MY OWN SCIENCE SCHOOL JAND',
+                schoolName: document.getElementById('schoolName').value.trim() || 'My own Science school',
                 schoolAddress: document.getElementById('schoolAddress').value.trim() || `${CHALLAN_BRANCH_CONTACTS.main.campusLabel} - ${CHALLAN_BRANCH_CONTACTS.main.addressLine}`,
                 urduNote: document.getElementById('urduNote').value.trim() || '',
                 notes: document.getElementById('challanNotes').value.trim() || 'No additional instructions.',
@@ -1087,16 +1561,11 @@
 
         function getChallanQrBlockReason(data) {
             const selectedStudent = getSelectedChallanStudent();
-            if (!selectedStudent || !data.studentId) return 'Select a student to generate a payment QR code.';
-            if (!data.feeMonth || data.feeMonth === '-') return 'Select a fee month before generating a payment QR code.';
-            if (!data.challanNumber || data.challanNumber === '-') return 'Enter a challan number before generating a payment QR code.';
-            if (data.totalDue <= 0) return 'No payable amount is due, so a payment QR code is not needed.';
-
-            const feeSummary = getChallanStudentFeeSummary(selectedStudent);
-            if (!feeSummary.pendingMonths.length) {
-                return 'This student has no pending fee, so a payment QR code is not needed.';
-            }
-
+            if (!selectedStudent || !data.studentId) return 'Select a student to generate the QR code.';
+            if (isStudentFeePaid(selectedStudent)) return 'Paid';
+            if (!data.feeMonth || data.feeMonth === '-') return 'Fee month is required.';
+            if (!data.challanNumber || data.challanNumber === '-') return 'Challan number is required.';
+            if (data.totalDue <= 0) return 'No due amount, QR code is not required.';
             return '';
         }
 
@@ -1140,12 +1609,12 @@
                                 <td class="challan-value">${escapeHtml(data.fatherMobile)}</td>
                             </tr>
                             <tr>
-                                <td class="challan-label">Family No.</td>
-                                <td class="challan-value">${escapeHtml(data.familyNo)}</td>
                                 <td class="challan-label">Challan Month</td>
-                                <td class="challan-value-wide">${escapeHtml(data.challanMonth)}</td>
+                                <td class="challan-value">${escapeHtml(data.challanMonth)}</td>
                                 <td class="challan-label">Due Date</td>
-                                <td class="challan-value">${escapeHtml(data.dueDate)}</td>
+                                <td class="challan-value-wide">${escapeHtml(data.dueDate)}</td>
+                                <td class="challan-label">Session</td>
+                                <td class="challan-value">${escapeHtml(data.session)}</td>
                             </tr>
                             <tr>
                                 <td class="challan-label">Fee Month</td>
@@ -1177,7 +1646,7 @@
                             </tr>
                             <tr>
                                 <td colspan="4" class="challan-qr-note">
-                                    ${escapeHtml(challanQrState.status || `Scan this QR code to mark ${data.studentName}'s fee as paid.`)}
+                                    ${escapeHtml(challanQrState.status || `Scan QR to mark ${data.feeMonth} as paid.`)}
                                 </td>
                                 <td colspan="2" class="challan-qr-cell">
                                     ${challanQrState.qrImageUrl

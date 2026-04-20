@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Notifications - Apexiums School management</title>
+    <title>Notifications - My own Science school</title>
     <link rel="stylesheet" href="style.css">
     <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
     <script src="https://unpkg.com/lucide@latest"></script>
@@ -496,20 +496,20 @@
         function getStudentFeeAlertSummary(student) {
             const monthlyFees = JSON.parse(localStorage.getItem(NOTIFICATION_MONTHLY_FEES_KEY) || '{}');
             const studentMonthly = monthlyFees[student.id] || {};
-            const paidMonths = NOTIFICATION_MONTHS.filter((month) => studentMonthly[month] === 'Paid');
-            let pendingMonths = NOTIFICATION_MONTHS.filter((month) => studentMonthly[month] !== 'Paid');
-
-            if (!pendingMonths.length && String(student.feesStatus || '').toLowerCase() !== 'paid') {
-                pendingMonths = [NOTIFICATION_MONTHS[new Date().getMonth()]];
-            }
+            const currentMonth = NOTIFICATION_MONTHS[new Date().getMonth()];
+            const paidMonths = studentMonthly[currentMonth] === 'Paid' ? [currentMonth] : [];
+            const isCurrentMonthPending =
+                studentMonthly[currentMonth] !== 'Paid' &&
+                String(student.feesStatus || '').toLowerCase() !== 'paid';
+            const pendingMonths = isCurrentMonthPending ? [currentMonth] : [];
 
             const monthlyFee = parseInt(student.monthlyFee || 0, 10) || 0;
             return {
                 monthlyFee,
                 paidMonths,
                 pendingMonths,
-                pendingAmount: pendingMonths.length * monthlyFee,
-                currentMonthPending: studentMonthly[NOTIFICATION_MONTHS[new Date().getMonth()]] !== 'Paid'
+                pendingAmount: isCurrentMonthPending ? monthlyFee : 0,
+                currentMonthPending: isCurrentMonthPending
             };
         }
 
@@ -641,7 +641,7 @@
                         <div class="fee-alert-main">
                             <h3>${escapeNotificationHtml(student.fullName || 'Unnamed Student')}</h3>
                             <p>${escapeNotificationHtml(student.classGrade || 'No class')} | Roll: ${escapeNotificationHtml(student.rollNo || '-')} | Campus: ${escapeNotificationHtml(student.campusName || '-')}</p>
-                            <p>Pending Months: <strong>${escapeNotificationHtml(visibleMonths || 'None')}${escapeNotificationHtml(extraMonths)}</strong></p>
+                            <p>Pending Month: <strong>${escapeNotificationHtml(visibleMonths || 'None')}${escapeNotificationHtml(extraMonths)}</strong></p>
                         </div>
                         <div class="fee-alert-amount">
                             PKR ${summary.pendingAmount.toLocaleString('en-PK')}

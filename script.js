@@ -29,6 +29,9 @@ const BACKEND_URL = isLocalhost
 
 const API_BASE_URL = `${BACKEND_URL}/api`;
 let socket;
+let activePortalSessionsCache = [];
+const DEFAULT_CAMPUS_NAMES = ['Main Campus', 'Ali campus', 'Fatima Campus'];
+let studentQuickFilterBranchCampuses = [];
 
 (function installAppPopups() {
     if (window.showAppAlert && window.showAppConfirm) return;
@@ -177,6 +180,17 @@ if (typeof io !== 'undefined') {
         localStorage.setItem(STORAGE_KEY_STAFF, JSON.stringify(mergeStaffRecords(data)));
         if (window.location.pathname.includes('staff.html')) renderStaff();
     });
+
+    socket.on('session_forced_logout', (payload) => {
+        const targetSessionId = String(payload?.sessionId || '').trim();
+        const currentSessionId = String(sessionStorage.getItem('eduCore_session_id') || '').trim();
+        if (!targetSessionId || !currentSessionId || targetSessionId !== currentSessionId) return;
+
+        showAppAlert('This login session has been logged out by admin.', 'Session Ended')
+            .finally(() => {
+                logoutUser();
+            });
+    });
 }
 
 async function parseJsonResponse(response, fallbackMessage = 'The server returned an unexpected response.') {
@@ -247,6 +261,10 @@ async function initialSQLSync() {
             const data = await tRes.json();
             const mergedTeachers = mergeTeacherRecords(data);
             localStorage.setItem(STORAGE_KEY_TEACHERS, JSON.stringify(mergedTeachers));
+            const missingTeachers = getMissingRecords(mergedTeachers, data);
+            if (missingTeachers.length) {
+                await syncToSQL('teachers', missingTeachers);
+            }
             if (typeof renderTeachers === 'function') renderTeachers();
         }
 
@@ -371,7 +389,6 @@ document.addEventListener('DOMContentLoaded', () => {
     ensureAttendanceNav();
     ensureNotificationsNav();
     ensureSpecialNoticesNav();
-    ensureResetDataNav();
     applyBranchScopedStudentsView();
 
     // === INIT ICONS ===
@@ -478,6 +495,11 @@ document.addEventListener('DOMContentLoaded', () => {
                     // Store JWT and User Info
                     sessionStorage.setItem('eduCore_token', result.token);
                     sessionStorage.setItem('loggedInUser', JSON.stringify(result.user));
+                    if (result.sessionId) {
+                        sessionStorage.setItem('eduCore_session_id', String(result.sessionId));
+                    } else {
+                        sessionStorage.removeItem('eduCore_session_id');
+                    }
                     sessionStorage.removeItem('eduCore_permissions_config');
                     if (result.permissions) {
                         sessionStorage.setItem('eduCore_permissions_config', JSON.stringify(result.permissions));
@@ -545,22 +567,15 @@ document.addEventListener('DOMContentLoaded', () => {
             localStorage.setItem(STORAGE_KEY_STUDENTS, JSON.stringify(normalizedStudents));
         }
         renderStudents(); // Initial Load
+        loadStudentQuickFilterBranchCampuses();
         studentForm.addEventListener('submit', handleStudentFormSubmit);
         const studentSearch = document.getElementById('studentSearchInput');
-        const genderFilter = document.getElementById('genderFilter');
-        const campusFilter = document.getElementById('campusFilter');
-        const ageFilter = document.getElementById('ageFilter');
+        const quickFilter = document.getElementById('studentQuickFilter');
         if (studentSearch) {
             studentSearch.addEventListener('input', renderStudents);
         }
-        if (genderFilter) {
-            genderFilter.addEventListener('change', renderStudents);
-        }
-        if (campusFilter) {
-            campusFilter.addEventListener('change', renderStudents);
-        }
-        if (ageFilter) {
-            ageFilter.addEventListener('change', renderStudents);
+        if (quickFilter) {
+            quickFilter.addEventListener('change', renderStudents);
         }
     }
 
@@ -628,6 +643,7 @@ document.addEventListener('DOMContentLoaded', () => {
         // We are on the dashboard
         updateDashboardStats();
         window.setInterval(updateActivePortalLogins, 30000);
+        bindActiveSessionsModalEvents();
         // renderDashboardTable(); // Table removed by user request
 
         const dSearch = document.getElementById('dashSearch');
@@ -728,21 +744,32 @@ function mergeStudentRecords(incomingStudents) {
 function mergeTeacherRecords(incomingTeachers) {
     const existingTeachers = getData(STORAGE_KEY_TEACHERS);
     const incomingList = Array.isArray(incomingTeachers) ? incomingTeachers : [];
-
-    return incomingList.map((teacher) => {
+    const mergedTeachers = incomingList.map((teacher) => {
         const localTeacher = existingTeachers.find(item => item.id === teacher.id) || {};
+        const normalizedDesignation = normalizeTeacherDesignation(
+            teacher.designation || localTeacher.designation,
+            teacher.groupKey || localTeacher.groupKey
+        );
 
         return {
             ...localTeacher,
             ...teacher,
-            designation: teacher.designation || localTeacher.designation || 'Teacher',
-            groupKey: teacher.groupKey || localTeacher.groupKey || 'teacher',
+            designation: normalizedDesignation.designation,
+            groupKey: normalizedDesignation.groupKey,
             profileImage: teacher.profileImage || localTeacher.profileImage || '',
             schedule: normalizeTeacherSchedule(teacher.schedule || localTeacher.schedule),
             plainPassword: teacher.plainPassword || localTeacher.plainPassword ||
                 (localTeacher.password && !isHashedPassword(localTeacher.password) ? localTeacher.password : '')
         };
     });
+
+    existingTeachers.forEach((teacher) => {
+        if (!mergedTeachers.some(item => item.id === teacher.id)) {
+            mergedTeachers.push(teacher);
+        }
+    });
+
+    return mergedTeachers;
 }
 
 function mergeStaffRecords(incomingStaff) {
@@ -949,6 +976,33 @@ function getDesignationGroup(selectId, fallbackGroupKey) {
     return option?.dataset?.groupKey || fallbackGroupKey;
 }
 
+function normalizeTeacherDesignation(designationValue = '', groupKeyValue = '') {
+    const designation = String(designationValue || '').trim().toLowerCase();
+    const groupKey = String(groupKeyValue || '').trim().toLowerCase();
+
+    if (designation === 'superadmin' || designation === 'super admin' || designation === 'super_admin' || groupKey === 'superadmin' || groupKey === 'super_admin') {
+        return { designation: 'Superadmin', groupKey: 'superadmin' };
+    }
+
+    if (designation === 'computer operator' || designation === 'computer_operator' || designation === 'computer opetaor' || groupKey === 'computer_operator' || groupKey === 'computeroperator') {
+        return { designation: 'Computer Operator', groupKey: 'computer_operator' };
+    }
+
+    if (
+        designation === 'admin' ||
+        designation === 'system administrator' ||
+        designation === 'principal' ||
+        designation === 'branch manager' ||
+        groupKey === 'admin' ||
+        groupKey === 'principal' ||
+        groupKey === 'branch_manager'
+    ) {
+        return { designation: 'Admin', groupKey: 'admin' };
+    }
+
+    return { designation: 'Teacher', groupKey: 'teacher' };
+}
+
 function setDesignationSelectValue(selectId, value, fallbackGroupKey) {
     const select = document.getElementById(selectId);
     if (!select) return;
@@ -974,13 +1028,15 @@ function validateStudentIdentityInputs({ studentId = '', username = '', email = 
     const normalizedUsername = normalizeOptionalIdentityValue(username);
     const normalizedEmail = normalizeOptionalIdentityValue(email, 'email');
 
-    const usernameConflict = students.find(student =>
-        student.id !== studentId &&
-        normalizeOptionalIdentityValue(student.username) === normalizedUsername
-    );
+    if (normalizedUsername) {
+        const usernameConflict = students.find(student =>
+            student.id !== studentId &&
+            normalizeOptionalIdentityValue(student.username) === normalizedUsername
+        );
 
-    if (usernameConflict) {
-        return 'This student username is already assigned to another student.';
+        if (usernameConflict) {
+            return 'This student username is already assigned to another student.';
+        }
     }
 
     if (normalizedEmail) {
@@ -1443,7 +1499,7 @@ function applyBranchScopedStudentsView() {
     }
 
     const allowedCampus = loggedInUser.campusName || '';
-    const campusFilter = document.getElementById('campusFilter');
+    const quickFilter = document.getElementById('studentQuickFilter');
     const addStudentButton = document.querySelector('.student-toolbar > .btn.btn-primary');
     const formContainer = document.getElementById('studentFormContainer');
 
@@ -1453,9 +1509,9 @@ function applyBranchScopedStudentsView() {
         link.style.display = keepVisible ? '' : 'none';
     });
 
-    if (campusFilter && allowedCampus) {
-        campusFilter.value = allowedCampus;
-        campusFilter.disabled = true;
+    if (quickFilter && allowedCampus) {
+        quickFilter.value = `campus:${allowedCampus}`;
+        quickFilter.disabled = true;
     }
 
     if (addStudentButton) addStudentButton.style.display = 'none';
@@ -2080,6 +2136,151 @@ function updateDashboardStats() {
     updateActivePortalLogins();
 }
 
+function escapeSessionText(value) {
+    return String(value ?? '').replace(/[&<>"']/g, (char) => ({
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        '"': '&quot;',
+        "'": '&#39;'
+    }[char]));
+}
+
+function formatSessionTimestamp(value) {
+    const dt = new Date(value);
+    if (Number.isNaN(dt.getTime())) return '-';
+    return `${dt.toLocaleDateString()} ${dt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+}
+
+function getSessionLocationLabel(session = {}) {
+    const ip = String(session.ip || '').trim();
+    if (!ip) return 'Unknown';
+    if (ip === '::1' || ip === '127.0.0.1' || ip.includes('localhost')) return `Localhost (${ip})`;
+    if (ip.startsWith('192.168.') || ip.startsWith('10.') || ip.startsWith('172.')) return `Private Network (${ip})`;
+    return ip;
+}
+
+function bindActiveSessionsModalEvents() {
+    const card = document.getElementById('activeLoginsCard');
+    const overlay = document.getElementById('sessionModalOverlay');
+    const closeBtn = document.getElementById('sessionModalClose');
+    if (!card || !overlay || !closeBtn) return;
+
+    card.addEventListener('click', () => {
+        overlay.classList.add('active');
+        renderActiveSessionsTable(activePortalSessionsCache);
+    });
+
+    closeBtn.addEventListener('click', () => {
+        overlay.classList.remove('active');
+    });
+
+    overlay.addEventListener('click', (event) => {
+        if (event.target === overlay) overlay.classList.remove('active');
+    });
+
+    document.addEventListener('keydown', (event) => {
+        if (event.key === 'Escape' && overlay.classList.contains('active')) {
+            overlay.classList.remove('active');
+        }
+    });
+}
+
+function renderActiveSessionsTable(sessions = []) {
+    const tbody = document.getElementById('activeSessionsBody');
+    if (!tbody) return;
+    tbody.innerHTML = '';
+
+    if (!Array.isArray(sessions) || !sessions.length) {
+        tbody.innerHTML = '<tr><td colspan="6">No active sessions found.</td></tr>';
+        return;
+    }
+
+    sessions.forEach((session) => {
+        const tr = document.createElement('tr');
+        const shortUA = String(session.userAgent || '-').slice(0, 120);
+        tr.innerHTML = `
+            <td>
+                <div class="session-meta">
+                    <strong>${escapeSessionText(session.fullName || session.username || 'Unknown')}</strong>
+                    <small>${escapeSessionText(session.username || '-')}</small>
+                </div>
+            </td>
+            <td>${escapeSessionText(session.role || '-')}</td>
+            <td>
+                <div class="session-meta">
+                    <span>${escapeSessionText(getSessionLocationLabel(session))}</span>
+                    <small>${escapeSessionText(session.campusName || 'No campus')}</small>
+                </div>
+            </td>
+            <td title="${escapeSessionText(session.userAgent || '-')}">${escapeSessionText(shortUA || '-')}</td>
+            <td>
+                <div class="session-meta">
+                    <span>${escapeSessionText(formatSessionTimestamp(session.lastSeen))}</span>
+                    <small>Login: ${escapeSessionText(formatSessionTimestamp(session.loginAt))}</small>
+                </div>
+            </td>
+            <td class="session-actions">
+                <button type="button" class="btn btn-outline" data-session-logout="${escapeSessionText(session.sessionId || '')}">Logout</button>
+            </td>
+        `;
+        tbody.appendChild(tr);
+    });
+
+    tbody.querySelectorAll('[data-session-logout]').forEach((btn) => {
+        btn.addEventListener('click', async (event) => {
+            event.stopPropagation();
+            const sessionId = btn.getAttribute('data-session-logout');
+            await forceLogoutActiveSession(sessionId);
+        });
+    });
+}
+
+function getUniqueActiveUsersFromSessions(sessions = []) {
+    const unique = new Map();
+    (Array.isArray(sessions) ? sessions : []).forEach((session) => {
+        const key = `${session.role || ''}:${session.userId || session.username || ''}`;
+        if (!unique.has(key)) unique.set(key, session);
+    });
+    return Array.from(unique.values());
+}
+
+async function forceLogoutActiveSession(sessionId) {
+    if (!sessionId) return;
+    const token = sessionStorage.getItem('eduCore_token');
+    if (!token) return;
+
+    const shouldLogout = await showAppConfirm('Log out this active session?', 'Force Logout');
+    if (!shouldLogout) return;
+
+    try {
+        const response = await fetch(`${API_BASE_URL}/active-sessions/logout`, {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ sessionId })
+        });
+        let result = await parseJsonResponse(response, 'Session logout failed.');
+
+        if (!response.ok || result?.success === false) {
+            // Backward compatibility fallback for environments still using DELETE endpoint.
+            const fallback = await fetch(`${API_BASE_URL}/active-sessions/${encodeURIComponent(sessionId)}`, {
+                method: 'DELETE',
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            result = await parseJsonResponse(fallback, 'Session logout failed.');
+            if (!fallback.ok || result?.success === false) {
+                throw new Error(result?.message || 'Session logout failed.');
+            }
+        }
+        await updateActivePortalLogins();
+    } catch (error) {
+        await showAppAlert(error.message || 'Session logout failed.', 'Error');
+    }
+}
+
 async function updateActivePortalLogins() {
     const countEl = document.getElementById('dashActiveLogins');
     const detailEl = document.getElementById('dashActiveLoginsDetail');
@@ -2107,12 +2308,23 @@ async function updateActivePortalLogins() {
             .map(([role, count]) => `${role}: ${count}`)
             .join(' | ');
 
-        countEl.innerText = String(result.totalActiveLogins || 0);
+        activePortalSessionsCache = getUniqueActiveUsersFromSessions(result.sessions || []);
+        const activeUserCount = Number(result.uniqueActiveUsers || activePortalSessionsCache.length || 0);
+        countEl.innerText = String(activeUserCount);
         detailEl.title = roleCounts;
-        detailEl.innerHTML = `<i data-lucide="monitor-up" size="16"></i> ${result.uniqueActiveUsers || 0} users active now`;
+        detailEl.innerHTML = `<i data-lucide="monitor-up" size="16"></i> ${activeUserCount} users active now`;
+        const overlay = document.getElementById('sessionModalOverlay');
+        if (overlay?.classList.contains('active')) {
+            renderActiveSessionsTable(activePortalSessionsCache);
+        }
     } catch (error) {
+        activePortalSessionsCache = [];
         countEl.innerText = '0';
         detailEl.innerHTML = '<i data-lucide="monitor-up" size="16"></i> Live sessions unavailable';
+        const overlay = document.getElementById('sessionModalOverlay');
+        if (overlay?.classList.contains('active')) {
+            renderActiveSessionsTable([]);
+        }
     }
 
     if (window.lucide) window.lucide.createIcons();
@@ -2221,11 +2433,6 @@ async function handleStudentFormSubmit(e) {
     const studentEmailInput = document.getElementById('studentEmail') ? document.getElementById('studentEmail').value.trim().toLowerCase() : '';
 
     // Validation
-    if (!usernameInput || !studentPasswordInput) {
-        alert('Please create login credentials for the student.');
-        if (!document.getElementById('credPanel').classList.contains('active')) toggleStepPanel('credPanel');
-        return;
-    }
     if (!monthlyFeeInput || monthlyFeeInput === '0') {
         alert('Please set the student fee structure.');
         if (!document.getElementById('feePanel').classList.contains('active')) toggleStepPanel('feePanel');
@@ -2290,7 +2497,46 @@ async function handleStudentFormSubmit(e) {
     pushNotification('Student Updated', `Account for "${newStudent.fullName}" saved and activated.`, 'user');
     toggleStudentForm();
     renderStudents();
-    showSuccessModal('Student Registered!', `The account for ${newStudent.fullName} is now active. They can log in using username: ${usernameInput}`);
+    if (usernameInput && studentPasswordInput) {
+        showSuccessModal('Student Registered!', `The account for ${newStudent.fullName} is now active. They can log in using username: ${usernameInput}`);
+    } else {
+        showSuccessModal('Student Registered!', `The record for ${newStudent.fullName} is saved without login credentials.`);
+    }
+}
+
+function decodeRowPayload(encodedPayload) {
+    try {
+        return JSON.parse(decodeURIComponent(String(encodedPayload || '')));
+    } catch (error) {
+        return null;
+    }
+}
+
+function editStudentFromEncoded(encodedPayload) {
+    const payload = decodeRowPayload(encodedPayload);
+    if (!payload) {
+        alert('Unable to load student details for editing.');
+        return;
+    }
+    editStudent(payload);
+}
+
+function editTeacherFromEncoded(encodedPayload) {
+    const payload = decodeRowPayload(encodedPayload);
+    if (!payload) {
+        alert('Unable to load teacher details for editing.');
+        return;
+    }
+    editTeacher(payload);
+}
+
+function viewTeacherAttendanceFromEncoded(encodedPayload) {
+    const payload = decodeRowPayload(encodedPayload);
+    if (!payload) {
+        alert('Unable to load teacher attendance details.');
+        return;
+    }
+    viewTeacherAttendance(payload);
 }
 
 function renderStudents(term = '') {
@@ -2298,9 +2544,7 @@ function renderStudents(term = '') {
     if (!tbody) return;
 
     const searchInput = document.getElementById('studentSearchInput');
-    const genderFilter = document.getElementById('genderFilter');
-    const campusFilter = document.getElementById('campusFilter');
-    const ageFilter = document.getElementById('ageFilter');
+    const quickFilter = document.getElementById('studentQuickFilter');
     const loggedInUser = getLoggedInUser();
 
     if (typeof term !== 'string') {
@@ -2309,11 +2553,23 @@ function renderStudents(term = '') {
         term = term.toLowerCase().trim();
     }
 
-    const selectedGender = genderFilter ? genderFilter.value : 'All';
-    const selectedAge = ageFilter ? ageFilter.value : 'All';
-    const selectedCampus = loggedInUser?.role === 'Branch'
-        ? (loggedInUser.campusName || 'All')
-        : (campusFilter ? campusFilter.value : 'All');
+    populateStudentQuickFilterOptions();
+    const quickValue = quickFilter ? String(quickFilter.value || 'all') : 'all';
+    let selectedGender = 'All';
+    let selectedAge = 'All';
+    let selectedCampus = 'All';
+
+    if (quickValue.startsWith('gender:')) {
+        selectedGender = quickValue.split(':')[1] || 'All';
+    } else if (quickValue.startsWith('campus:')) {
+        selectedCampus = quickValue.slice('campus:'.length) || 'All';
+    } else if (quickValue === 'age:below5') {
+        selectedAge = 'below5';
+    }
+
+    if (loggedInUser?.role === 'Branch') {
+        selectedCampus = loggedInUser.campusName || selectedCampus;
+    }
 
     const students = getData(STORAGE_KEY_STUDENTS);
     const filtered = students.filter(s =>
@@ -2341,7 +2597,7 @@ function renderStudents(term = '') {
         noData.style.display = 'none';
         filtered.forEach(s => {
             let statusClass = s.feesStatus === 'Paid' ? 'status-paid' : (s.feesStatus === 'Late' ? 'status-failed' : 'status-pending');
-            const visiblePassword = getVisibleStudentPassword(s);
+            const encodedStudent = encodeURIComponent(JSON.stringify(s));
             const tr = document.createElement('tr');
             tr.innerHTML = `
                 <td><b>${s.studentCode || '-'}</b></td>
@@ -2355,21 +2611,83 @@ function renderStudents(term = '') {
                 <td class="cell-compact">${s.classGrade}</td>
                     <td class="cell-compact">${s.campusName || 'Main Campus'}</td>
                 <td>${s.gender || '-'}</td>
-                <td>${s.parentPhone}</td>
-                <td>${s.formB || '-'}</td>
-                <td class="login-details">${loggedInUser?.role === 'Branch'
-                    ? '<span style="color: var(--text-secondary);">Restricted</span>'
-                    : `<strong>User:</strong> ${s.username || '-'}<br><strong>Pass:</strong> ${visiblePassword}`}</td>
                 <td><span class="status-badge ${statusClass}">${s.feesStatus}</span></td>
                 <td>${loggedInUser?.role === 'Branch'
                     ? '<span style="color: var(--text-secondary); font-size: 0.85rem;">View Only</span>'
-                    : `<button class="action-btn btn-edit" onclick='editStudent(${JSON.stringify(s)})'><i data-lucide="edit-2" width="14"></i> Edit</button>
+                    : `<button class="action-btn btn-edit" onclick="editStudentFromEncoded('${encodedStudent}')"><i data-lucide="edit-2" width="14"></i> Edit</button>
                     <button class="action-btn btn-delete" onclick="deleteStudent('${s.id}')"><i data-lucide="trash-2" width="14"></i></button>`}
                 </td>
             `;
             tbody.appendChild(tr);
         });
         window.lucide.createIcons();
+    }
+}
+
+function populateStudentQuickFilterOptions() {
+    const quickFilter = document.getElementById('studentQuickFilter');
+    if (!quickFilter) return;
+
+    const previousValue = quickFilter.value || 'all';
+    const students = getData(STORAGE_KEY_STUDENTS);
+    const campusMap = new Map();
+    [...DEFAULT_CAMPUS_NAMES, ...studentQuickFilterBranchCampuses,
+        ...students.map((student) => String(student.campusName || 'Main Campus').trim())]
+        .forEach((campusName) => {
+            const normalized = String(campusName || '').trim();
+            if (!normalized) return;
+            const key = normalized.toLowerCase();
+            if (!campusMap.has(key)) campusMap.set(key, normalized);
+        });
+    const campuses = Array.from(campusMap.values()).sort((a, b) => a.localeCompare(b));
+
+    quickFilter.innerHTML = `
+        <option value="all">All Students</option>
+        <option value="gender:Male">Male Students</option>
+        <option value="gender:Female">Female Students</option>
+        <option value="gender:Other">Other Gender</option>
+        <option value="age:below5">Below 5 Years</option>
+    `;
+
+    if (campuses.length) {
+        const campusGroup = document.createElement('optgroup');
+        campusGroup.label = 'Campus';
+        campuses.forEach((campusName) => {
+            const option = document.createElement('option');
+            option.value = `campus:${campusName}`;
+            option.textContent = campusName;
+            campusGroup.appendChild(option);
+        });
+        quickFilter.appendChild(campusGroup);
+    }
+
+    const loggedInUser = getLoggedInUser();
+    if (loggedInUser?.role === 'Branch' && loggedInUser.campusName) {
+        quickFilter.value = `campus:${loggedInUser.campusName}`;
+        quickFilter.disabled = true;
+        return;
+    }
+
+    const hasPrevious = Array.from(quickFilter.options).some((option) => option.value === previousValue);
+    quickFilter.value = hasPrevious ? previousValue : 'all';
+}
+
+async function loadStudentQuickFilterBranchCampuses() {
+    try {
+        const response = await fetch(`${API_BASE_URL}/branches`);
+        const responseText = await response.text();
+        const branches = responseText ? JSON.parse(responseText) : [];
+
+        if (!response.ok || !Array.isArray(branches)) {
+            throw new Error('Branch campuses unavailable.');
+        }
+
+        studentQuickFilterBranchCampuses = branches
+            .map((branch) => String(branch?.campusName || '').trim())
+            .filter(Boolean);
+        renderStudents();
+    } catch (error) {
+        studentQuickFilterBranchCampuses = [];
     }
 }
 
@@ -2516,6 +2834,11 @@ async function handleTeacherFormSubmit(e) {
         return;
     }
 
+    const normalizedTeacherDesignation = normalizeTeacherDesignation(
+        document.getElementById('tDesignation')?.value || 'Teacher',
+        getDesignationGroup('tDesignation', 'teacher')
+    );
+
     const newTeacher = {
         id: isEdit ? idField.value : generateUniqueRecordId('TCH'),
         employeeCode: document.getElementById('teacherCode').value || generateEntityCode(STORAGE_KEY_TEACHERS, 'TCH'),
@@ -2530,8 +2853,8 @@ async function handleTeacherFormSubmit(e) {
         qualification: document.getElementById('tQualification').value,
         campusName: document.getElementById('tCampusName').value,
         gender: document.getElementById('tGender').value,
-        designation: document.getElementById('tDesignation')?.value || 'Teacher',
-        groupKey: getDesignationGroup('tDesignation', 'teacher'),
+        designation: normalizedTeacherDesignation.designation,
+        groupKey: normalizedTeacherDesignation.groupKey,
         subject: document.getElementById('tSubject').value,
         salary: salaryValInput,
         username: usernameInput,
@@ -2749,6 +3072,8 @@ function renderTeachers(term = '') {
     } else {
         noData.style.display = 'none';
         filtered.forEach(t => {
+            const encodedTeacher = encodeURIComponent(JSON.stringify(t));
+            const normalizedTeacherDesignation = normalizeTeacherDesignation(t.designation, t.groupKey);
             const teacherAvatar = t.profileImage
                 ? `<img src="${t.profileImage}" alt="${t.fullName}" style="width:30px;height:30px;border-radius:50%;object-fit:cover;border:1px solid rgba(15,23,42,0.08);">`
                 : `<div style="width:30px;height:30px;background:#f0bdd1;color:#be185d;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:bold">${t.fullName.charAt(0).toUpperCase()}</div>`;
@@ -2758,7 +3083,7 @@ function renderTeachers(term = '') {
                     ${teacherAvatar}
                     <div class="teacher-name-text">
                         <div style="font-weight:500">${t.fullName}</div>
-                        <div style="font-size:0.75rem;color:var(--text-secondary)">${t.employeeCode || ''} ${t.designation ? ` - ${t.designation}` : ''}</div>
+                        <div style="font-size:0.75rem;color:var(--text-secondary)">${t.employeeCode || ''} ${normalizedTeacherDesignation.designation ? ` - ${normalizedTeacherDesignation.designation}` : ''}</div>
                         <div style="font-size:0.75rem;color:var(--text-secondary)">${t.qualification || ''}</div>
                     </div>
                 </div></td>
@@ -2780,13 +3105,13 @@ function renderTeachers(term = '') {
                 <td style="font-weight:600;">PKR ${parseInt(t.salary || 0).toLocaleString()}</td>
                 <td>${t.phone || '-'}</td>
                 <td>
-                    <button class="action-btn btn-view" onclick='viewTeacherAttendance(${JSON.stringify(t)})' title="View Attendance">
+                    <button class="action-btn btn-view" onclick="viewTeacherAttendanceFromEncoded('${encodedTeacher}')" title="View Attendance">
                         <i data-lucide="eye" width="14"></i>
                     </button>
                     <button class="action-btn btn-edit" onclick="openTeacherSchedule('${t.id}')" title="Assign Lectures">
                         <i data-lucide="calendar-clock" width="14"></i> Schedule
                     </button>
-                    <button class="action-btn btn-edit" onclick='editTeacher(${JSON.stringify(t)})'><i data-lucide="edit-2" width="14"></i> Edit</button>
+                    <button class="action-btn btn-edit" onclick="editTeacherFromEncoded('${encodedTeacher}')"><i data-lucide="edit-2" width="14"></i> Edit</button>
                     <button class="action-btn btn-delete" onclick="deleteTeacher('${t.id}')"><i data-lucide="trash-2" width="14"></i></button>
                 </td>
             `;
@@ -2798,6 +3123,7 @@ function renderTeachers(term = '') {
 
 function editTeacher(t) {
     toggleTeacherForm(true);
+    const normalizedTeacherDesignation = normalizeTeacherDesignation(t.designation, t.groupKey);
     document.getElementById('teacherId').value = t.id;
     document.getElementById('teacherCode').value = t.employeeCode || '';
     document.getElementById('tFullName').value = t.fullName;
@@ -2810,7 +3136,7 @@ function editTeacher(t) {
     document.getElementById('tQualification').value = t.qualification || '';
     document.getElementById('tCampusName').value = t.campusName || '';
     document.getElementById('tGender').value = t.gender || '';
-    setDesignationSelectValue('tDesignation', t.designation || 'Teacher', t.groupKey || 'teacher');
+    setDesignationSelectValue('tDesignation', normalizedTeacherDesignation.designation, normalizedTeacherDesignation.groupKey);
     document.getElementById('tSubject').value = t.subject;
     document.getElementById('tSalary').value = t.salary || '0';
     if (document.getElementById('tBankName')) document.getElementById('tBankName').value = t.bankName || '';
@@ -3362,10 +3688,10 @@ async function deleteClass(id) {
 function renderLoginHistory() {
     // Get Current User Info
     const authData = localStorage.getItem(STORAGE_KEY_AUTH);
-    const auth = authData ? JSON.parse(authData) : { email: 'Admin User' };
+    const auth = authData ? JSON.parse(authData) : { username: 'Admin User', email: 'Admin User' };
     const userDisplay = document.getElementById('currentUserDisplay');
     if (userDisplay) {
-        userDisplay.innerText = auth.email;
+        userDisplay.innerText = auth.username || auth.email || 'Admin User';
     }
 
     // Get History
@@ -3400,7 +3726,7 @@ function renderLoginHistory() {
 
 
 
-function loadSettings() {
+async function loadSettings() {
     const settings = localStorage.getItem(STORAGE_KEY_SETTINGS);
     const auth = localStorage.getItem(STORAGE_KEY_AUTH);
 
@@ -3411,43 +3737,93 @@ function loadSettings() {
         if (document.getElementById('sPhone')) document.getElementById('sPhone').value = data.phone || '';
     }
 
+    const usernameEl = document.getElementById('sAdminUsername');
+    if (!usernameEl) return;
+
     if (auth) {
         const authData = JSON.parse(auth);
-        if (document.getElementById('sContactEmail')) document.getElementById('sContactEmail').value = authData.email || 'apexiumstechnologies@gmail.com';
+        usernameEl.value = authData.username || authData.email || 'Myownschool';
+    }
+
+    const token = sessionStorage.getItem('eduCore_token');
+    if (!token) return;
+
+    try {
+        const response = await fetch(`${API_BASE_URL}/admin-credentials`, {
+            headers: {
+                'Authorization': `Bearer ${token}`
+            }
+        });
+        const result = await response.json();
+        if (!response.ok || !result?.success) return;
+
+        const apiUsername = String(result.credentials?.username || '').trim();
+        if (!apiUsername) return;
+
+        usernameEl.value = apiUsername;
+        const updatedLocalAuth = auth ? JSON.parse(auth) : {};
+        updatedLocalAuth.username = apiUsername;
+        updatedLocalAuth.email = apiUsername;
+        localStorage.setItem(STORAGE_KEY_AUTH, JSON.stringify(updatedLocalAuth));
+    } catch (error) {
+        console.warn('Unable to load admin credentials from API.', error);
     }
 }
 
-function handleSettingsSubmit(e) {
+async function handleSettingsSubmit(e) {
     e.preventDefault();
 
-    // 1. Get current values from storage for verification
+    // 1. Get current auth values
     const storedAuth = localStorage.getItem(STORAGE_KEY_AUTH);
-    const currentAuth = storedAuth ? JSON.parse(storedAuth) : { email: 'apexiumstechnologies@gmail.com', password: 'myownschool1122' };
+    const currentAuth = storedAuth ? JSON.parse(storedAuth) : { username: 'Myownschool', email: 'Myownschool', password: 'myownschool1122' };
 
-    // 2. Get verification inputs
-    const vEmail = document.getElementById('vOldEmail').value;
-    const vPass = document.getElementById('vOldPassword').value;
-
-    // 3. Verify
-    if (vEmail.toLowerCase() !== currentAuth.email.toLowerCase() || vPass !== currentAuth.password) {
-        alert('Verification Failed: Current Email or Password is incorrect. Changes not saved.');
-        return;
-    }
-
-    // 4. If verified, proceed with update
+    // 2. Save updated settings/auth values
     const settings = {};
     if (document.getElementById('sSchoolName')) settings.schoolName = document.getElementById('sSchoolName').value;
     if (document.getElementById('sSession')) settings.session = document.getElementById('sSession').value;
     if (document.getElementById('sPhone')) settings.phone = document.getElementById('sPhone').value;
 
-    const emailEl = document.getElementById('sContactEmail');
+    const usernameEl = document.getElementById('sAdminUsername');
     const passEl = document.getElementById('sPassword');
+    const token = sessionStorage.getItem('eduCore_token');
 
-    const newEmail = emailEl ? emailEl.value : currentAuth.email;
-    const newPassword = passEl ? passEl.value : '';
+    const newUsername = usernameEl ? usernameEl.value.trim() : (currentAuth.username || currentAuth.email || '');
+    const newPassword = passEl ? passEl.value.trim() : '';
+
+    if (!newUsername) {
+        alert('Admin username is required.');
+        return;
+    }
+
+    if (token) {
+        try {
+            const response = await fetch(`${API_BASE_URL}/admin-credentials`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`
+                },
+                body: JSON.stringify({
+                    username: newUsername,
+                    password: newPassword || undefined
+                })
+            });
+
+            const result = await response.json();
+            if (!response.ok || !result?.success) {
+                throw new Error(result?.message || 'Failed to update admin credentials.');
+            }
+        } catch (error) {
+            alert(error.message || 'Admin credentials update failed.');
+            return;
+        }
+    }
 
     const updatedAuth = { ...currentAuth };
-    if (newEmail) updatedAuth.email = newEmail;
+    if (newUsername) {
+        updatedAuth.username = newUsername;
+        updatedAuth.email = newUsername;
+    }
     if (newPassword) updatedAuth.password = newPassword;
 
     localStorage.setItem(STORAGE_KEY_SETTINGS, JSON.stringify(settings));
@@ -3456,10 +3832,8 @@ function handleSettingsSubmit(e) {
     alert('Account Credentials Updated Successfully!');
     pushNotification('Security Update', 'Admin credentials have been updated.', 'login');
 
-    // Reset security/verification fields
+    // Reset security fields
     if (passEl) passEl.value = '';
-    if (document.getElementById('vOldEmail')) document.getElementById('vOldEmail').value = '';
-    if (document.getElementById('vOldPassword')) document.getElementById('vOldPassword').value = '';
 
     // Refresh display
     renderLoginHistory();

@@ -147,68 +147,61 @@
             staff: true
         },
         roleGroups: {
-            Admin: 'admin',
-            Principal: 'principal',
-            Branch: 'branch_manager',
-            Teacher: 'teacher',
-            Student: 'student',
-            Staff: 'staff'
+            Admin: 'superadmin',
+            Principal: 'admin',
+            Branch: 'computer_operator',
+            Teacher: 'computer_operator',
+            Student: 'computer_operator',
+            Staff: 'computer_operator'
         },
         groups: {
-            admin: {
-                name: 'System Administrators',
+            superadmin: {
+                name: 'Superadmin',
                 homePage: 'dashboard.html',
                 permissions: {}
             },
-            principal: {
-                name: 'Principal Group',
+            admin: {
+                name: 'Admin',
                 homePage: 'dashboard.html',
-                permissions: { dashboard: 'view', students: 'view', teachers: 'view', staff: 'view' }
+                permissions: {
+                    dashboard: 'manage',
+                    students: 'manage',
+                    teachers: 'manage',
+                    staff: 'manage',
+                    classes: 'manage',
+                    fees: 'manage',
+                    fee_challan: 'manage',
+                    teacher_salaries: 'manage',
+                    student_attendance: 'manage',
+                    teacher_attendance: 'manage',
+                    student_attendance_report: 'view',
+                    teacher_attendance_report: 'view',
+                    notifications: 'manage',
+                    special_notices: 'manage',
+                    exams: 'manage',
+                    revenue: 'view',
+                    settings: 'view',
+                    branch_registration: 'view',
+                    aboutme: 'view',
+                    permissions: 'view'
+                }
             },
-            branch_manager: {
-                name: 'Branch Managers',
-                homePage: 'students.html',
-                permissions: { students: 'manage', dashboard: 'view', classes: 'view' }
-            },
-            teacher: {
-                name: 'Teachers',
+            computer_operator: {
+                name: 'Computer Operator',
                 homePage: 'dashboard.html',
-                permissions: { dashboard: 'view', students: 'view', classes: 'view', student_attendance: 'edit', exams: 'edit' }
-            },
-            senior_teacher: {
-                name: 'Senior Teachers',
-                homePage: 'dashboard.html',
-                permissions: { dashboard: 'view', students: 'view', teachers: 'view', classes: 'view', student_attendance: 'edit', exams: 'edit' }
-            },
-            coordinator: {
-                name: 'Coordinators',
-                homePage: 'dashboard.html',
-                permissions: { dashboard: 'view', students: 'view', teachers: 'view', classes: 'manage', student_attendance: 'manage', exams: 'edit' }
-            },
-            student: {
-                name: 'Students',
-                homePage: 'student_portal.html',
-                permissions: { student_portal: 'manage', fees: 'view', fee_challan: 'view', exams: 'view' }
-            },
-            staff: {
-                name: 'Staff',
-                homePage: 'dashboard.html',
-                permissions: { dashboard: 'view' }
-            },
-            accountant: {
-                name: 'Accountants',
-                homePage: 'dashboard.html',
-                permissions: { dashboard: 'view', fees: 'manage', fee_challan: 'manage', revenue: 'view' }
-            },
-            receptionist: {
-                name: 'Receptionists',
-                homePage: 'dashboard.html',
-                permissions: { dashboard: 'view', students: 'view', fees: 'view', fee_challan: 'view' }
-            },
-            office_assistant: {
-                name: 'Office Assistants',
-                homePage: 'dashboard.html',
-                permissions: { dashboard: 'view', students: 'view', classes: 'view' }
+                permissions: {
+                    dashboard: 'view',
+                    students: 'manage',
+                    teachers: 'view',
+                    staff: 'view',
+                    classes: 'view',
+                    fees: 'view',
+                    fee_challan: 'manage',
+                    student_attendance: 'edit',
+                    exams: 'view',
+                    notifications: 'view',
+                    aboutme: 'view'
+                }
             }
         }
     };
@@ -267,24 +260,18 @@
         const raw = input && typeof input === 'object' ? input : {};
         registerCustomModules(raw.customModules || []);
         const moduleKeys = [...new Set(Object.values(pageRegistry).map((entry) => entry.moduleKey).filter(Boolean))];
-        const rawGroups = raw.groups && typeof raw.groups === 'object'
-            ? raw.groups
-            : defaultPermissions.groups;
-        const groups = Object.entries(rawGroups).reduce((acc, [groupKey, group]) => {
+        const allowedGroupKeys = Object.keys(defaultPermissions.groups);
+        const rawGroups = raw.groups && typeof raw.groups === 'object' ? raw.groups : {};
+        const groups = allowedGroupKeys.reduce((acc, groupKey) => {
+            const group = rawGroups[groupKey] || defaultPermissions.groups[groupKey] || {};
             const nextGroup = group && typeof group === 'object' ? group : {};
             const permissions = { ...(nextGroup.permissions || {}) };
             moduleKeys.forEach((moduleKey) => {
-                if (!permissions[moduleKey]) permissions[moduleKey] = groupKey === 'admin' ? 'manage' : 'none';
+                if (!permissions[moduleKey]) permissions[moduleKey] = groupKey === 'superadmin' ? 'manage' : 'none';
             });
-            if (groupKey === 'principal' && !nextGroup.permissions?.notifications) {
-                permissions.notifications = 'view';
-            }
-            if (groupKey === 'principal' && !nextGroup.permissions?.special_notices) {
-                permissions.special_notices = 'manage';
-            }
             acc[groupKey] = {
                 ...nextGroup,
-                name: nextGroup.name || groupKey,
+                name: nextGroup.name || defaultPermissions.groups[groupKey].name || groupKey,
                 homePage: pageRegistry[nextGroup.homePage] ? nextGroup.homePage : 'dashboard.html',
                 permissions
             };
@@ -297,8 +284,8 @@
                 ...(raw.loginAccess || {})
             },
             roleGroups: {
-                ...defaultPermissions.roleGroups,
-                ...(raw.roleGroups || {})
+                ...(raw.roleGroups || {}),
+                ...defaultPermissions.roleGroups
             },
             customModules: normalizeCustomModules(raw.customModules || []),
             groups
@@ -837,6 +824,24 @@
     function startActiveSessionTracking() {
         if (!loggedInUser || !authToken || publicPages.has(currentPage)) return;
 
+        const ensureSessionId = () => {
+            const existing = sessionStorage.getItem('eduCore_session_id');
+            if (existing) return existing;
+            try {
+                const payloadSegment = String(authToken || '').split('.')[1] || '';
+                if (!payloadSegment) return '';
+                const normalized = payloadSegment.replace(/-/g, '+').replace(/_/g, '/');
+                const decoded = JSON.parse(atob(normalized));
+                const sid = String(decoded?.sessionId || '').trim();
+                if (sid) sessionStorage.setItem('eduCore_session_id', sid);
+                return sid;
+            } catch (_error) {
+                return '';
+            }
+        };
+
+        ensureSessionId();
+
         const sendHeartbeat = () => {
             fetch(`${getApiBaseUrl()}/session/heartbeat`, {
                 method: 'POST',
@@ -845,7 +850,13 @@
                     'Content-Type': 'application/json'
                 },
                 body: JSON.stringify({ page: currentPage })
-            }).catch(() => {});
+            })
+                .then((response) => {
+                    if (response.status === 401 || response.status === 403) {
+                        logoutUser();
+                    }
+                })
+                .catch(() => {});
         };
 
         sendHeartbeat();

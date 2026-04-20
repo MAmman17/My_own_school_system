@@ -9,11 +9,33 @@ const {
     loadPermissions
 } = require('./_lib/services');
 
+async function resolveAdminCredentials(db) {
+    const fallback = {
+        username: process.env.ADMIN_USERNAME || 'Myownschool',
+        password: process.env.ADMIN_PASSWORD || 'myownschool1122'
+    };
+
+    const appSettingModel = db?.models?.AppSetting;
+    if (!appSettingModel) return fallback;
+
+    try {
+        const row = await appSettingModel.findByPk('admin_credentials');
+        const saved = row?.settingValue ? JSON.parse(row.settingValue) : null;
+        const username = String(saved?.username || '').trim();
+        const password = String(saved?.password || '');
+        if (!username || !password) return fallback;
+        return { username, password };
+    } catch (_error) {
+        return fallback;
+    }
+}
+
 module.exports = createHandler({
     POST: async ({ res, db, body }) => {
         const { username, password } = body || {};
-        const adminEmail = process.env.ADMIN_USERNAME || 'Myownschool';
-        const adminPass = process.env.ADMIN_PASSWORD || 'myownschool1122';
+        const adminCredentials = await resolveAdminCredentials(db);
+        const adminEmail = adminCredentials.username;
+        const adminPass = adminCredentials.password;
 
         if (username === adminEmail && password === adminPass) {
             const permissions = await loadPermissions(db);

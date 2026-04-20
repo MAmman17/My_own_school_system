@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Manage Students - Apexiums School management</title>
+    <title>Manage Students - My own Science school</title>
     <link rel="stylesheet" href="style.css">
     <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
     <script src="https://unpkg.com/lucide@latest"></script>
@@ -386,28 +386,13 @@
                         <input type="text" id="studentSearchInput" placeholder="Search by name, roll no, or student ID">
                     </div>
                     <div class="student-filter-group">
-                        <label for="genderFilter">Filter By Gender</label>
-                        <select id="genderFilter">
-                            <option value="All">All Students</option>
-                            <option value="Male">Male</option>
-                            <option value="Female">Female</option>
-                            <option value="Other">Other</option>
-                        </select>
-                    </div>
-                    <div class="student-filter-group">
-                        <label for="campusFilter">Filter By Campus</label>
-                        <select id="campusFilter">
-                            <option value="All">All Campuses</option>
-                            <option value="Main Campus">Main Campus</option>
-                            <option value="Ali campus">Ali campus</option>
-                            <option value="Fatima Campus">Fatima Campus</option>
-                        </select>
-                    </div>
-                    <div class="student-filter-group">
-                        <label for="ageFilter">Filter By Age</label>
-                        <select id="ageFilter">
-                            <option value="All">All Ages</option>
-                            <option value="below5">Below 5 Years</option>
+                        <label for="studentQuickFilter">Quick Filter</label>
+                        <select id="studentQuickFilter">
+                            <option value="all">All Students</option>
+                            <option value="gender:Male">Male Students</option>
+                            <option value="gender:Female">Female Students</option>
+                            <option value="gender:Other">Other Gender</option>
+                            <option value="age:below5">Below 5 Years</option>
                         </select>
                     </div>
                     <button class="btn btn-outline student-print-btn" type="button" onclick="window.print()">
@@ -570,9 +555,6 @@
                             <th>Class</th>
                             <th>Campus</th>
                             <th>Gender</th>
-                            <th>Phone</th>
-                            <th>Form B</th>
-                            <th>Login Details</th>
                             <th>Status</th>
                             <th>Actions</th>
                         </tr>

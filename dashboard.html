@@ -4,10 +4,108 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Dashboard - Apexiums School management</title>
+    <title>Dashboard - My own Science school</title>
     <link rel="stylesheet" href="style.css">
     <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
     <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        .card.card-clickable {
+            cursor: pointer;
+        }
+
+        .session-modal-overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(15, 23, 42, 0.45);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 1100;
+            padding: 1rem;
+        }
+
+        .session-modal-overlay.active {
+            display: flex;
+        }
+
+        .session-modal {
+            width: min(980px, 100%);
+            max-height: 85vh;
+            background: #fff;
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-lg);
+            box-shadow: var(--shadow-lg);
+            overflow: hidden;
+            display: grid;
+            grid-template-rows: auto 1fr;
+        }
+
+        .session-modal-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 0.75rem;
+            padding: 0.9rem 1rem;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .session-modal-header h3 {
+            margin: 0;
+            font-size: 1rem;
+        }
+
+        .session-modal-close {
+            width: 34px;
+            height: 34px;
+            border: 1px solid var(--border-color);
+            border-radius: 0.5rem;
+            background: #fff;
+            cursor: pointer;
+        }
+
+        .session-modal-body {
+            overflow: auto;
+            padding: 0.9rem 1rem 1rem;
+        }
+
+        .session-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.88rem;
+        }
+
+        .session-table th,
+        .session-table td {
+            padding: 0.6rem 0.55rem;
+            border-bottom: 1px solid var(--border-color);
+            text-align: left;
+            vertical-align: top;
+        }
+
+        .session-table th {
+            background: #f8fbff;
+            font-weight: 700;
+            color: var(--text-secondary);
+            font-size: 0.78rem;
+            text-transform: uppercase;
+            letter-spacing: 0.03em;
+        }
+
+        .session-meta {
+            display: grid;
+            gap: 0.15rem;
+        }
+
+        .session-meta small {
+            color: var(--text-secondary);
+            font-size: 0.76rem;
+        }
+
+        .session-actions .btn {
+            padding: 0.45rem 0.7rem;
+            font-size: 0.78rem;
+        }
+    </style>
 </head>
 
 <body>
@@ -158,7 +256,7 @@
                     </div>
                 </a>
 
-                <div class="card" data-admin-only-card>
+                <div class="card card-clickable" data-admin-only-card id="activeLoginsCard" title="View active sessions">
                     <div class="card-title">Active Portal Logins</div>
                     <div class="card-value" id="dashActiveLogins">...</div>
                     <div class="card-trend trend-up" id="dashActiveLoginsDetail">
@@ -178,6 +276,31 @@
 
 
         </main>
+    </div>
+    <div class="session-modal-overlay" id="sessionModalOverlay">
+        <div class="session-modal">
+            <div class="session-modal-header">
+                <h3>Active Portal Logins</h3>
+                <button type="button" class="session-modal-close" id="sessionModalClose" aria-label="Close">x</button>
+            </div>
+            <div class="session-modal-body">
+                <table class="session-table">
+                    <thead>
+                        <tr>
+                            <th>User</th>
+                            <th>Role</th>
+                            <th>Where Logged In</th>
+                            <th>Device</th>
+                            <th>Last Seen</th>
+                            <th>Action</th>
+                        </tr>
+                    </thead>
+                    <tbody id="activeSessionsBody">
+                        <tr><td colspan="6">Loading active sessions...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
     </div>
 
     <script src="auth.js"></script>

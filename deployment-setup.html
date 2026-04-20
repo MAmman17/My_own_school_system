@@ -190,25 +190,25 @@
 
 <body>
     <div class="container">
-        <h1>🚀 Deployment Setup</h1>
-        <p class="subtitle">School Management System ko deploy karne ke liye ye steps follow karo</p>
+        <h1>Deployment Setup</h1>
+        <p class="subtitle">Follow these steps to deploy the School Management System.</p>
 
         <div class="warning">
-            <strong>⚠️ Important:</strong> Deployment se pehle apna code GitHub pe push karo!
+            <strong>Important:</strong> Push your latest code to GitHub before deployment.
         </div>
 
         <!-- Step 1 -->
         <div class="step">
             <h3>
                 <span class="step-number">1</span>
-                Backend URL Update Karo
+                Update Backend URL
             </h3>
                 <p>After deploying the backend on Render, copy the backend URL and paste it here:</p>
             <input type="text" id="backendUrl" class="url-input" placeholder="https://your-backend.onrender.com"
                 value="https://school-management-backend.onrender.com">
             <button class="btn" onclick="updateBackendUrl()">Update script.js</button>
             <div id="updateSuccess" class="success">
-                ✅ Backend URL successfully updated in script.js!
+                Backend URL successfully updated in script.js.
             </div>
         </div>
 
@@ -216,7 +216,7 @@
         <div class="step">
             <h3>
                 <span class="step-number">2</span>
-                GitHub Pe Push Karo
+                Push to GitHub
             </h3>
                 <p>Run these commands in the terminal:</p>
             <div class="code-box">
@@ -233,14 +233,14 @@ git push</pre>
                 <span class="step-number">3</span>
                 Deployment Links
             </h3>
-            <p>In platforms pe jao aur deploy karo:</p>
+            <p>Use these platforms for deployment:</p>
             <div class="links">
                 <a href="https://dashboard.render.com" target="_blank" class="link-card">
-                    <h4>🔧 Render</h4>
+                    <h4>Render</h4>
                     <p>Backend Deploy</p>
                 </a>
                 <a href="https://vercel.com/new" target="_blank" class="link-card">
-                    <h4>🌐 Vercel</h4>
+                    <h4>Vercel</h4>
                     <p>Frontend Deploy</p>
                 </a>
             </div>
@@ -252,13 +252,11 @@ git push</pre>
                 <span class="step-number">4</span>
                 Detailed Guide
             </h3>
-            <p>Complete step-by-step instructions ke liye <a href="#" onclick="openGuide()">DEPLOYMENT_GUIDE.md</a> file
-                dekho.</p>
+            <p>For complete step-by-step instructions, open <a href="#" onclick="openGuide()">DEPLOYMENT_GUIDE.md</a>.</p>
         </div>
 
         <div class="warning" style="margin-top: 30px;">
-            <strong>💡 Pro Tip:</strong> Pehle backend deploy karo (Render), phir frontend (Vercel). Backend URL milne
-            ke baad Step 1 complete karo.
+            <strong>Pro Tip:</strong> Deploy the backend first (Render), then the frontend (Vercel). After you get the backend URL, complete Step 1.
         </div>
     </div>
 

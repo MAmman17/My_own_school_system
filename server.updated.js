@@ -19,7 +19,6 @@ const io = new Server(server, { cors: { origin: '*' } });
 const JWT_SECRET = process.env.JWT_SECRET || 'eduCore_secret_key_2026';
 const PERMISSIONS_FILE = path.join(__dirname, 'permissions.json');
 const DATE_SHEET_FILE = path.join(__dirname, 'date_sheet.json');
-const ADMIN_CREDENTIALS_FILE = path.join(__dirname, 'admin_credentials.json');
 const PRINCIPAL_USERNAME = process.env.PRINCIPAL_USERNAME || 'principal@school.com';
 const PRINCIPAL_PASSWORD = process.env.PRINCIPAL_PASSWORD || 'Principal123';
 
@@ -33,14 +32,6 @@ app.get('/', (req, res) => {
         success: true,
         message: 'Server is running.',
         app: 'School Management System API'
-    });
-});
-
-app.get('/health', (_req, res) => {
-    res.json({
-        success: true,
-        initialized: isInitialized,
-        timestamp: new Date().toISOString()
     });
 });
 
@@ -120,58 +111,136 @@ const defaultPermissions = {
         staff: true
     },
     roleGroups: {
-        Admin: 'superadmin',
-        Principal: 'admin',
-        Branch: 'computer_operator',
-        Teacher: 'computer_operator',
-        Student: 'computer_operator',
-        Staff: 'computer_operator'
+        Admin: 'admin',
+        Principal: 'principal',
+        Branch: 'branch_manager',
+        Teacher: 'teacher',
+        Student: 'student',
+        Staff: 'staff'
     },
     groups: {
-        superadmin: {
-            name: 'Superadmin',
+        admin: {
+            name: 'System Administrators',
             homePage: 'dashboard.html',
             permissions: buildModuleSet('manage')
         },
-        admin: {
-            name: 'Admin',
-            homePage: 'dashboard.html',
-            permissions: buildModuleSet('none', {
-                dashboard: 'manage',
-                students: 'manage',
-                teachers: 'manage',
-                staff: 'manage',
-                classes: 'manage',
-                fees: 'manage',
-                fee_challan: 'manage',
-                teacher_salaries: 'manage',
-                student_attendance: 'manage',
-                teacher_attendance: 'manage',
-                student_attendance_report: 'view',
-                teacher_attendance_report: 'view',
-                notifications: 'manage',
-                special_notices: 'manage',
-                exams: 'manage',
-                revenue: 'view',
-                settings: 'view',
-                branch_registration: 'view',
-                permissions: 'view',
-                aboutme: 'view'
-            })
-        },
-        computer_operator: {
-            name: 'Computer Operator',
+        principal: {
+            name: 'Principal Group',
             homePage: 'dashboard.html',
             permissions: buildModuleSet('none', {
                 dashboard: 'view',
-                students: 'manage',
+                students: 'view',
                 teachers: 'view',
                 staff: 'view',
                 classes: 'view',
-                fees: 'view',
-                fee_challan: 'manage',
-                student_attendance: 'edit',
+                notifications: 'view',
+                special_notices: 'manage',
                 exams: 'view',
+                revenue: 'view',
+                aboutme: 'view'
+            })
+        },
+        branch_manager: {
+            name: 'Branch Managers',
+            homePage: 'students.html',
+            permissions: buildModuleSet('none', {
+                students: 'manage',
+                dashboard: 'view',
+                classes: 'view',
+                aboutme: 'view'
+            })
+        },
+        teacher: {
+            name: 'Teachers',
+            homePage: 'dashboard.html',
+            permissions: buildModuleSet('none', {
+                dashboard: 'view',
+                students: 'view',
+                classes: 'view',
+                student_attendance: 'edit',
+                student_attendance_report: 'view',
+                exams: 'edit',
+                aboutme: 'view'
+            })
+        },
+        senior_teacher: {
+            name: 'Senior Teachers',
+            homePage: 'dashboard.html',
+            permissions: buildModuleSet('none', {
+                dashboard: 'view',
+                students: 'view',
+                teachers: 'view',
+                classes: 'view',
+                student_attendance: 'edit',
+                student_attendance_report: 'view',
+                exams: 'edit',
+                aboutme: 'view'
+            })
+        },
+        coordinator: {
+            name: 'Coordinators',
+            homePage: 'dashboard.html',
+            permissions: buildModuleSet('none', {
+                dashboard: 'view',
+                students: 'view',
+                teachers: 'view',
+                classes: 'manage',
+                student_attendance: 'manage',
+                student_attendance_report: 'view',
+                teacher_attendance: 'view',
+                exams: 'edit',
+                aboutme: 'view'
+            })
+        },
+        student: {
+            name: 'Students',
+            homePage: 'student_portal.html',
+            permissions: buildModuleSet('none', {
+                student_portal: 'manage',
+                fees: 'view',
+                fee_challan: 'view',
+                exams: 'view',
+                aboutme: 'view'
+            })
+        },
+        staff: {
+            name: 'Staff',
+            homePage: 'dashboard.html',
+            permissions: buildModuleSet('none', {
+                dashboard: 'view',
+                aboutme: 'view'
+            })
+        },
+        accountant: {
+            name: 'Accountants',
+            homePage: 'dashboard.html',
+            permissions: buildModuleSet('none', {
+                dashboard: 'view',
+                fees: 'manage',
+                fee_challan: 'manage',
+                revenue: 'view',
+                aboutme: 'view'
+            })
+        },
+        receptionist: {
+            name: 'Receptionists',
+            homePage: 'dashboard.html',
+            permissions: buildModuleSet('none', {
+                dashboard: 'view',
+                students: 'view',
+                fees: 'view',
+                fee_challan: 'view',
+                notifications: 'view',
+                aboutme: 'view'
+            })
+        },
+        office_assistant: {
+            name: 'Office Assistants',
+            homePage: 'dashboard.html',
+            permissions: buildModuleSet('none', {
+                dashboard: 'view',
+                students: 'view',
+                classes: 'view',
                 notifications: 'view',
                 aboutme: 'view'
             })
@@ -187,8 +256,10 @@ function normalizePermissionsConfig(input = {}) {
     customModules.forEach((module) => {
         if (module && module.page) allowedHomePages.add(String(module.page));
     });
-    const groups = Object.keys(defaultPermissions.groups).reduce((acc, key) => {
-        const groupValue = groupsInput[key] || defaultPermissions.groups[key];
+    const groups = Object.entries({
+        ...defaultPermissions.groups,
+        ...groupsInput
+    }).reduce((acc, [key, groupValue]) => {
         const baseGroup = defaultPermissions.groups[key] || {
             name: key,
             homePage: 'dashboard.html',
@@ -213,8 +284,8 @@ function normalizePermissionsConfig(input = {}) {
             ...(raw.loginAccess || {})
         },
         roleGroups: {
-            ...(raw.roleGroups || {}),
-            ...defaultPermissions.roleGroups
+            ...defaultPermissions.roleGroups,
+            ...(raw.roleGroups || {})
         },
         customModules,
         groups
@@ -340,37 +411,15 @@ async function ensureUniqueStudentIdentity(Student, User, item) {
     }
 }
 
-function isLocalDbHost(hostname) {
-    const host = String(hostname || '').toLowerCase();
-    return host === 'localhost' || host === '127.0.0.1' || host === '::1';
-}
-
-function shouldAutoCreateDatabase(hostname) {
-    const explicit = String(process.env.AUTO_CREATE_DB || '').trim().toLowerCase();
-    if (explicit === 'true') return true;
-    if (explicit === 'false') return false;
-    return isLocalDbHost(hostname);
-}
-
 async function initializeDatabase() {
-    const dbHost = process.env.DB_HOST || 'localhost';
-    const dbPort = Number(process.env.DB_PORT || 3306);
-    const dbName = process.env.DB_NAME || 'school_system';
-
-    if (!shouldAutoCreateDatabase(dbHost)) {
-        console.log('Skipping CREATE DATABASE on non-local/shared hosting.');
-        return;
-    }
-
     try {
         const connection = await mysql.createConnection({
-            host: dbHost,
-            port: dbPort,
+            host: process.env.DB_HOST || 'localhost',
             user: process.env.DB_USER || 'root',
             password: process.env.DB_PASSWORD || ''
         });
 
-        await connection.query(`CREATE DATABASE IF NOT EXISTS \`${dbName}\`;`);
+        await connection.query(`CREATE DATABASE IF NOT EXISTS \`${process.env.DB_NAME || 'school_system'}\`;`);
         await connection.end();
     } catch (err) {
         console.warn('Database initialization warning:', err.message);
@@ -433,13 +482,11 @@ function registerActiveSession(req, sessionId, user) {
 
 function buildActiveSessionsSummary() {
     pruneActiveSessions();
-    const sessions = Array.from(activeSessions.values())
-        .sort((a, b) => Number(b.lastSeen || 0) - Number(a.lastSeen || 0))
-        .map((session) => ({
-            ...session,
-            loginAt: new Date(session.loginAt).toISOString(),
-            lastSeen: new Date(session.lastSeen).toISOString()
-        }));
+    const sessions = Array.from(activeSessions.values()).map((session) => ({
+        ...session,
+        loginAt: new Date(session.loginAt).toISOString(),
+        lastSeen: new Date(session.lastSeen).toISOString()
+    }));
     const byRole = sessions.reduce((acc, session) => {
         const role = session.role || 'Unknown';
         acc[role] = (acc[role] || 0) + 1;
@@ -487,84 +534,6 @@ function writePermissions(data) {
     return nextPermissions;
 }
 
-function getDefaultAdminCredentials() {
-    return {
-        username: process.env.ADMIN_USERNAME || 'Myownschool',
-        password: process.env.ADMIN_PASSWORD || 'myownschool1122'
-    };
-}
-
-function readAdminCredentials() {
-    const defaults = getDefaultAdminCredentials();
-    try {
-        if (!fs.existsSync(ADMIN_CREDENTIALS_FILE)) {
-            return defaults;
-        }
-
-        const raw = fs.readFileSync(ADMIN_CREDENTIALS_FILE, 'utf8');
-        const parsed = JSON.parse(raw);
-        const username = String(parsed?.username || '').trim();
-        const password = String(parsed?.password || '');
-
-        if (!username || !password) {
-            return defaults;
-        }
-
-        return { username, password };
-    } catch (_error) {
-        return defaults;
-    }
-}
-
-function writeAdminCredentials(data = {}) {
-    const username = String(data.username || '').trim();
-    const password = String(data.password || '');
-
-    if (!username) {
-        const error = new Error('Admin username is required.');
-        error.statusCode = 400;
-        throw error;
-    }
-
-    if (!password) {
-        const error = new Error('Admin password is required.');
-        error.statusCode = 400;
-        throw error;
-    }
-
-    const next = { username, password };
-    fs.writeFileSync(ADMIN_CREDENTIALS_FILE, JSON.stringify(next, null, 2), 'utf8');
-    return next;
-}
-
-function verifyAdminAccessToken(req) {
-    const authHeader = req.headers.authorization || '';
-    const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : '';
-
-    if (!token) {
-        const error = new Error('Admin access required.');
-        error.statusCode = 401;
-        throw error;
-    }
-
-    let user = null;
-    try {
-        user = jwt.verify(token, JWT_SECRET);
-    } catch (_error) {
-        const error = new Error('Admin access required.');
-        error.statusCode = 401;
-        throw error;
-    }
-
-    if (user.role !== 'Admin') {
-        const error = new Error('Admin access required.');
-        error.statusCode = 403;
-        throw error;
-    }
-
-    return user;
-}
-
 app.get('/api/permissions', (req, res) => {
     res.json(readPermissions());
 });
@@ -575,32 +544,6 @@ app.post('/api/permissions', (req, res) => {
         res.json({ success: true, permissions: saved });
     } catch (error) {
         res.status(500).json({ success: false, message: 'Failed to save permissions.' });
-    }
-});
-
-app.get('/api/admin-credentials', (req, res) => {
-    try {
-        verifyAdminAccessToken(req);
-        const credentials = readAdminCredentials();
-        res.json({ success: true, credentials: { username: credentials.username } });
-    } catch (error) {
-        res.status(error.statusCode || 500).json({ success: false, message: error.message || 'Failed to load admin credentials.' });
-    }
-});
-
-app.post('/api/admin-credentials', (req, res) => {
-    try {
-        verifyAdminAccessToken(req);
-        const current = readAdminCredentials();
-        const nextUsername = String(req.body?.username || '').trim();
-        const nextPassword = String(req.body?.password || '').trim();
-        const saved = writeAdminCredentials({
-            username: nextUsername || current.username,
-            password: nextPassword || current.password
-        });
-        res.json({ success: true, credentials: { username: saved.username } });
-    } catch (error) {
-        res.status(error.statusCode || 500).json({ success: false, message: error.message || 'Failed to save admin credentials.' });
     }
 });
 
@@ -666,16 +609,15 @@ app.post('/api/login', async (req, res) => {
     const { username, password } = req.body;
 
     try {
-        const adminCredentials = readAdminCredentials();
-        const adminUsername = adminCredentials.username;
-        const adminPass = adminCredentials.password;
+        const adminEmail = process.env.ADMIN_USERNAME || 'Myownschool';
+        const adminPass = process.env.ADMIN_PASSWORD || 'myownschool1122';
 
-        if (username === adminUsername && password === adminPass) {
+        if (username === adminEmail && password === adminPass) {
             const permissions = readPermissions();
             const groupKey = permissions.roleGroups.Admin || 'admin';
             const sessionId = createSessionId('Admin', 'admin');
             const token = jwt.sign({ id: 'admin', role: 'Admin', sessionId }, JWT_SECRET, { expiresIn: '1d' });
-            const user = { id: 'admin', fullName: 'Administrator', role: 'Admin', username: adminUsername, groupKey };
+            const user = { id: 'admin', fullName: 'Administrator', role: 'Admin', username: adminEmail, groupKey };
             registerActiveSession(req, sessionId, user);
             return res.json({
                 success: true,
@@ -2181,7 +2123,6 @@ async function startServer() {
             process.env.DB_PASSWORD || '',
             {
                 host: process.env.DB_HOST || 'localhost',
-                port: Number(process.env.DB_PORT || 3306),
                 dialect: 'mysql',
                 logging: false
             }

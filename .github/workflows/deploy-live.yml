@@ -1,0 +1,74 @@
+name: Auto Deploy Live (cPanel SSH)
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+concurrency:
+  group: live-deploy
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy latest code on live server
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.LIVE_HOST }}
+          username: ${{ secrets.LIVE_USER }}
+          key: ${{ secrets.LIVE_SSH_KEY }}
+          port: ${{ secrets.LIVE_PORT }}
+          script_stop: true
+          script: |
+            set -e
+
+            APP_PATH="${{ secrets.LIVE_APP_PATH }}"
+            BRANCH="${{ secrets.LIVE_BRANCH }}"
+            if [ -z "$BRANCH" ]; then BRANCH="main"; fi
+
+            if [ -z "$APP_PATH" ]; then
+              echo "LIVE_APP_PATH secret is missing."
+              exit 1
+            fi
+
+            cd "$APP_PATH"
+
+            if [ ! -d ".git" ]; then
+              echo "No git repository found at $APP_PATH."
+              echo "Clone your GitHub repo there one time first."
+              exit 1
+            fi
+
+            BACKUP_DIR="$APP_PATH/.deploy-backup"
+            rm -rf "$BACKUP_DIR"
+            mkdir -p "$BACKUP_DIR"
+
+            for file in .env permissions.json date_sheet.json admin_credentials.json; do
+              if [ -f "$file" ]; then
+                cp "$file" "$BACKUP_DIR/$file"
+              fi
+            done
+
+            git fetch --all --prune
+            git checkout "$BRANCH"
+            git reset --hard "origin/$BRANCH"
+
+            for file in .env permissions.json date_sheet.json admin_credentials.json; do
+              if [ -f "$BACKUP_DIR/$file" ]; then
+                cp "$BACKUP_DIR/$file" "$file"
+              fi
+            done
+
+            if [ -f "package-lock.json" ]; then
+              npm ci --omit=dev
+            else
+              npm install --omit=dev
+            fi
+
+            mkdir -p tmp
+            touch tmp/restart.txt
+
+            echo "Live deployment completed."

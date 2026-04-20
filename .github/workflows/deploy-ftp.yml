@@ -1,0 +1,53 @@
+name: Auto Deploy Live (cPanel FTP)
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+concurrency:
+  group: live-deploy-ftp
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Prepare restart marker
+        run: |
+          mkdir -p tmp
+          date -u +"%Y-%m-%dT%H:%M:%SZ" > tmp/restart.txt
+
+      - name: Deploy via FTP
+        if: ${{ secrets.FTP_SERVER != '' && secrets.FTP_USERNAME != '' && secrets.FTP_PASSWORD != '' && secrets.FTP_PORT != '' && secrets.FTP_SERVER_DIR != '' }}
+        uses: SamKirkland/FTP-Deploy-Action@v4.3.5
+        with:
+          server: ${{ secrets.FTP_SERVER }}
+          username: ${{ secrets.FTP_USERNAME }}
+          password: ${{ secrets.FTP_PASSWORD }}
+          port: ${{ secrets.FTP_PORT }}
+          protocol: ftp
+          local-dir: ./
+          server-dir: ${{ secrets.FTP_SERVER_DIR }}
+          dangerous-clean-slate: false
+          exclude: |
+            **/.git*
+            **/.git*/**
+            **/.github/**
+            **/node_modules/**
+            **/.env
+            **/permissions.json
+            **/date_sheet.json
+            **/admin_credentials.json
+            **/.deploy-backup/**
+            **/server.log
+            **/stderr.log
+
+      - name: Skip deploy (missing required FTP secrets)
+        if: ${{ !(secrets.FTP_SERVER != '' && secrets.FTP_USERNAME != '' && secrets.FTP_PASSWORD != '' && secrets.FTP_PORT != '' && secrets.FTP_SERVER_DIR != '') }}
+        run: |
+          echo "Skipping FTP deploy. Required secrets are missing: FTP_SERVER, FTP_USERNAME, FTP_PASSWORD, FTP_PORT, FTP_SERVER_DIR"

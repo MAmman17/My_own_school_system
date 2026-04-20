@@ -655,10 +655,14 @@
 
     function buildPortalDashboardOverview(user, permissions) {
         const modules = getAccessibleModules(user, permissions);
+        const getModuleLabel = (item) => String(item?.label || '').trim() || String(item?.pageName || '')
+            .replace(/\.html$/i, '')
+            .replace(/[-_]+/g, ' ')
+            .replace(/\b\w/g, (match) => match.toUpperCase());
         const searchableModules = modules.filter((item) => item.pageName !== currentPage);
         const cards = searchableModules.map((item) => `
             <a href="${escapeHtml(item.pageName)}" class="card" data-portal-module-card>
-                <div class="card-title">${escapeHtml(item.label || item.pageName)}</div>
+                <div class="card-title">${escapeHtml(getModuleLabel(item))}</div>
                 <div class="card-value">${escapeHtml(getAccessLabel(item.access))}</div>
                 <div class="card-trend trend-up">
                     <i data-lucide="trending-up" size="16"></i>
@@ -715,10 +719,14 @@
 
     function buildPortalSidebar(user, permissions) {
         const modules = getAccessibleModules(user, permissions);
+        const getModuleLabel = (item) => String(item?.label || '').trim() || String(item?.pageName || '')
+            .replace(/\.html$/i, '')
+            .replace(/[-_]+/g, ' ')
+            .replace(/\b\w/g, (match) => match.toUpperCase());
         const navItems = modules.map((item) => `
             <a href="${escapeHtml(item.pageName)}" class="nav-item ${item.pageName === currentPage ? 'active' : ''}">
                 <i data-lucide="${escapeHtml(item.icon || 'circle')}"></i>
-                <span>${escapeHtml(item.label || item.pageName)}</span>
+                <span>${escapeHtml(getModuleLabel(item))}</span>
             </a>
         `).join('');
 
@@ -787,6 +795,10 @@
 
             const modules = getAccessibleModules(user, permissions)
                 .filter((item) => item.pageName !== currentPage);
+            const getModuleLabel = (item) => String(item?.label || '').trim() || String(item?.pageName || '')
+                .replace(/\.html$/i, '')
+                .replace(/[-_]+/g, ' ')
+                .replace(/\b\w/g, (match) => match.toUpperCase());
             const panel = document.createElement('section');
             panel.id = 'portalAccessPanel';
             panel.className = 'portal-access-panel';
@@ -801,7 +813,7 @@
                             <a class="portal-access-card" href="${escapeHtml(item.pageName)}">
                                 <span class="portal-access-icon"><i data-lucide="${escapeHtml(item.icon || 'circle')}"></i></span>
                                 <span>
-                                    <span class="portal-access-title">${escapeHtml(item.label || item.pageName)}</span>
+                                    <span class="portal-access-title">${escapeHtml(getModuleLabel(item))}</span>
                                     <span class="portal-access-meta">${escapeHtml(getAccessLabel(item.access))} Access</span>
                                 </span>
                             </a>

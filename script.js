@@ -2521,6 +2521,54 @@ function editStudentFromEncoded(encodedPayload) {
     editStudent(payload);
 }
 
+function viewStudentFromEncoded(encodedPayload) {
+    const payload = decodeRowPayload(encodedPayload);
+    if (!payload) {
+        alert('Unable to load student details.');
+        return;
+    }
+    viewStudent(payload);
+}
+
+function viewStudent(student) {
+    const modal = document.getElementById('studentViewModal');
+    if (!modal) {
+        const compactDetails = `ID: ${student.studentCode || '-'} | Roll: ${student.rollNo || '-'} | Name: ${student.fullName || '-'} | Class: ${student.classGrade || '-'} | Campus: ${student.campusName || 'Main Campus'}`;
+        showAppAlert(compactDetails, 'Student Details');
+        return;
+    }
+
+    const detailsMap = {
+        viewStudentCode: student.studentCode || '-',
+        viewStudentRollNo: student.rollNo || '-',
+        viewStudentName: student.fullName || '-',
+        viewStudentFatherName: student.fatherName || '-',
+        viewStudentDob: formatDateForDisplay(student.dob),
+        viewStudentClass: student.classGrade || '-',
+        viewStudentCampus: student.campusName || 'Main Campus',
+        viewStudentGender: student.gender || '-',
+        viewStudentStatus: student.feesStatus || 'Pending',
+        viewStudentPhone: student.parentPhone || '-',
+        viewStudentEmail: student.email || '-',
+        viewStudentUsername: student.username || '-'
+    };
+
+    Object.entries(detailsMap).forEach(([id, value]) => {
+        const target = document.getElementById(id);
+        if (target) target.textContent = value;
+    });
+
+    modal.style.display = 'flex';
+    if (window.lucide && typeof window.lucide.createIcons === 'function') {
+        window.lucide.createIcons();
+    }
+}
+
+function closeStudentViewModal() {
+    const modal = document.getElementById('studentViewModal');
+    if (modal) modal.style.display = 'none';
+}
+
 function editTeacherFromEncoded(encodedPayload) {
     const payload = decodeRowPayload(encodedPayload);
     if (!payload) {
@@ -2609,13 +2657,16 @@ function renderStudents(term = '') {
                 <td class="cell-compact">${s.fatherName || '-'}</td>
                 <td>${formatDateForDisplay(s.dob)}</td>
                 <td class="cell-compact">${s.classGrade}</td>
-                    <td class="cell-compact">${s.campusName || 'Main Campus'}</td>
+                <td class="cell-compact">${s.campusName || 'Main Campus'}</td>
                 <td>${s.gender || '-'}</td>
                 <td><span class="status-badge ${statusClass}">${s.feesStatus}</span></td>
-                <td>${loggedInUser?.role === 'Branch'
-                    ? '<span style="color: var(--text-secondary); font-size: 0.85rem;">View Only</span>'
+                <td><div class="student-actions">
+                    <button class="action-btn btn-view" onclick="viewStudentFromEncoded('${encodedStudent}')"><i data-lucide="eye" width="14"></i> View</button>
+                    ${loggedInUser?.role === 'Branch'
+                    ? ''
                     : `<button class="action-btn btn-edit" onclick="editStudentFromEncoded('${encodedStudent}')"><i data-lucide="edit-2" width="14"></i> Edit</button>
-                    <button class="action-btn btn-delete" onclick="deleteStudent('${s.id}')"><i data-lucide="trash-2" width="14"></i></button>`}
+                    <button class="action-btn btn-delete" onclick="deleteStudent('${s.id}')"><i data-lucide="trash-2" width="14"></i> Delete</button>`}
+                </div>
                 </td>
             `;
             tbody.appendChild(tr);

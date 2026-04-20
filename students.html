@@ -52,6 +52,15 @@
             background: #dbeafe;
         }
 
+        .btn-view {
+            background: #ecfeff;
+            color: #0f766e;
+        }
+
+        .btn-view:hover {
+            background: #cffafe;
+        }
+
         .btn-delete {
             background: #fee2e2;
             color: var(--danger-color);
@@ -59,6 +68,13 @@
 
         .btn-delete:hover {
             background: #fecaca;
+        }
+
+        .student-actions {
+            display: flex;
+            align-items: center;
+            gap: 0.4rem;
+            flex-wrap: wrap;
         }
 
         .toolbar {
@@ -256,9 +272,9 @@
                 display: none !important;
             }
 
-            .student-name-cell {
-                gap: 0.4rem !important;
-            }
+        .student-name-cell {
+            gap: 0.4rem !important;
+        }
 
             .student-avatar {
                 width: 22px !important;
@@ -274,6 +290,70 @@
             #noDataMessage {
                 display: none !important;
             }
+        }
+
+        .student-view-overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.45);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 1200;
+            padding: 1rem;
+        }
+
+        .student-view-modal {
+            width: min(760px, 95vw);
+            max-height: 90vh;
+            overflow: auto;
+            background: #fff;
+            border-radius: 16px;
+            border: 1px solid var(--border-color);
+            box-shadow: 0 20px 48px rgba(2, 6, 23, 0.26);
+        }
+
+        .student-view-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 0.75rem;
+            padding: 1rem 1.25rem;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .student-view-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+            gap: 0.75rem;
+            padding: 1rem 1.25rem;
+        }
+
+        .student-view-item {
+            border: 1px solid var(--border-color);
+            background: #f8fafc;
+            border-radius: 10px;
+            padding: 0.65rem 0.75rem;
+        }
+
+        .student-view-item strong {
+            display: block;
+            font-size: 0.78rem;
+            color: var(--text-secondary);
+            margin-bottom: 0.2rem;
+            letter-spacing: 0.01em;
+        }
+
+        .student-view-item span {
+            font-weight: 600;
+            color: var(--text-primary);
+            word-break: break-word;
+        }
+
+        .student-view-footer {
+            padding: 0 1.25rem 1.1rem;
+            display: flex;
+            justify-content: flex-end;
         }
     </style>
 </head>
@@ -577,6 +657,34 @@
             <h2 id="successTitle">Success!</h2>
             <p id="successMessage" style="color: var(--text-secondary); margin: 1rem 0 2rem;"></p>
             <button class="btn btn-primary" style="width: 100%;" onclick="closeSuccessModal()">Great!</button>
+        </div>
+    </div>
+
+    <div id="studentViewModal" class="student-view-overlay" onclick="if(event.target===this) closeStudentViewModal()">
+        <div class="student-view-modal">
+            <div class="student-view-header">
+                <h2 style="margin: 0; font-size: 1.2rem;">Student Details</h2>
+                <button type="button" class="action-btn btn-delete" onclick="closeStudentViewModal()">
+                    <i data-lucide="x" width="14"></i> Close
+                </button>
+            </div>
+            <div class="student-view-grid">
+                <div class="student-view-item"><strong>Student ID</strong><span id="viewStudentCode">-</span></div>
+                <div class="student-view-item"><strong>Roll No</strong><span id="viewStudentRollNo">-</span></div>
+                <div class="student-view-item"><strong>Name</strong><span id="viewStudentName">-</span></div>
+                <div class="student-view-item"><strong>Father Name</strong><span id="viewStudentFatherName">-</span></div>
+                <div class="student-view-item"><strong>Date of Birth</strong><span id="viewStudentDob">-</span></div>
+                <div class="student-view-item"><strong>Class</strong><span id="viewStudentClass">-</span></div>
+                <div class="student-view-item"><strong>Campus</strong><span id="viewStudentCampus">-</span></div>
+                <div class="student-view-item"><strong>Gender</strong><span id="viewStudentGender">-</span></div>
+                <div class="student-view-item"><strong>Status</strong><span id="viewStudentStatus">-</span></div>
+                <div class="student-view-item"><strong>Parent Phone</strong><span id="viewStudentPhone">-</span></div>
+                <div class="student-view-item"><strong>Email</strong><span id="viewStudentEmail">-</span></div>
+                <div class="student-view-item"><strong>Username</strong><span id="viewStudentUsername">-</span></div>
+            </div>
+            <div class="student-view-footer">
+                <button type="button" class="btn btn-outline" onclick="closeStudentViewModal()">Close</button>
+            </div>
         </div>
     </div>
 

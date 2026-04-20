@@ -318,7 +318,8 @@
 
         function toLabel(value) {
             return String(value || '')
-                .replace(/_/g, ' ')
+                .replace(/\.html$/i, '')
+                .replace(/[-_]+/g, ' ')
                 .replace(/\b\w/g, (match) => match.toUpperCase());
         }
 
@@ -380,7 +381,7 @@
                 if (!alreadyExists) {
                     const extraOpt = document.createElement('option');
                     extraOpt.value = currentValue;
-                    extraOpt.textContent = currentValue;
+                    extraOpt.textContent = toLabel(currentValue);
                     select.appendChild(extraOpt);
                 }
                 select.value = currentValue;

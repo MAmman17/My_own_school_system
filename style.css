@@ -1967,22 +1967,22 @@ button {
 /* === Responsive Table Fit (Global) === */
 .table-container {
     width: 100%;
-    overflow-x: hidden !important;
+    overflow-x: auto !important;
 }
 
 .table-container table {
     width: 100% !important;
-    min-width: 0 !important;
-    table-layout: fixed;
+    min-width: max-content !important;
+    table-layout: auto;
 }
 
 .table-container thead th,
 .table-container tbody td {
     min-width: 0 !important;
-    max-width: 100%;
+    max-width: none;
     white-space: normal;
-    overflow-wrap: anywhere;
-    word-break: break-word;
+    overflow-wrap: break-word;
+    word-break: normal;
 }
 
 /* Keep action cells usable without forcing full table overflow */
@@ -2013,4 +2013,18 @@ button {
 #studentsTable th:nth-child(4),
 #studentsTable td:nth-child(4) {
     min-width: 170px !important;
+}
+
+/* Teacher/Staff readability fix: avoid letter-by-letter wrapping */
+#teachersTable,
+#staffTable {
+    table-layout: auto !important;
+}
+
+#teachersTable th,
+#teachersTable td,
+#staffTable th,
+#staffTable td {
+    word-break: normal !important;
+    overflow-wrap: break-word !important;
 }

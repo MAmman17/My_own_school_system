@@ -129,6 +129,7 @@
         'revenue.html': { moduleKey: 'revenue', defaultHome: 'dashboard.html', label: 'Revenue', icon: 'trending-up' },
         'settings.html': { moduleKey: 'settings', defaultHome: 'dashboard.html', label: 'Settings', icon: 'settings' },
         'permissions.html': { moduleKey: 'permissions', defaultHome: 'dashboard.html', label: 'Permissions', icon: 'shield' },
+        'designation-permissions.html': { moduleKey: 'permissions', defaultHome: 'dashboard.html', label: 'Designation Permissions', icon: 'shield-check' },
         'branch_registration.html': { moduleKey: 'branch_registration', defaultHome: 'dashboard.html', label: 'Branch Registration', icon: 'building-2' },
         'aboutme.html': { moduleKey: 'aboutme', defaultHome: 'dashboard.html', label: 'About Us', icon: 'info' },
         'student_portal.html': { moduleKey: 'student_portal', defaultHome: 'student_portal.html', label: 'Student Portal', icon: 'graduation-cap' }
@@ -298,19 +299,21 @@
         const raw = input && typeof input === 'object' ? input : {};
         registerCustomModules(raw.customModules || []);
         const moduleKeys = [...new Set(Object.values(pageRegistry).map((entry) => entry.moduleKey).filter(Boolean))];
-        const allowedGroupKeys = Object.keys(defaultPermissions.groups);
         const rawGroups = raw.groups && typeof raw.groups === 'object' ? raw.groups : {};
-        const groups = allowedGroupKeys.reduce((acc, groupKey) => {
-            const group = rawGroups[groupKey] || defaultPermissions.groups[groupKey] || {};
-            const nextGroup = group && typeof group === 'object' ? group : {};
-            const permissions = { ...(nextGroup.permissions || {}) };
+        const groups = Object.entries({
+            ...defaultPermissions.groups,
+            ...rawGroups
+        }).reduce((acc, [groupKey, groupValue]) => {
+            const baseGroup = defaultPermissions.groups[groupKey] || { name: groupKey, homePage: 'dashboard.html', permissions: {} };
+            const nextGroup = groupValue && typeof groupValue === 'object' ? groupValue : {};
+            const permissions = { ...(baseGroup.permissions || {}), ...(nextGroup.permissions || {}) };
             moduleKeys.forEach((moduleKey) => {
                 if (!permissions[moduleKey]) permissions[moduleKey] = groupKey === 'superadmin' ? 'manage' : 'none';
             });
             acc[groupKey] = {
                 ...nextGroup,
-                name: nextGroup.name || defaultPermissions.groups[groupKey].name || groupKey,
-                homePage: pageRegistry[nextGroup.homePage] ? nextGroup.homePage : 'dashboard.html',
+                name: nextGroup.name || baseGroup.name || groupKey,
+                homePage: pageRegistry[nextGroup.homePage] ? nextGroup.homePage : (baseGroup.homePage || 'dashboard.html'),
                 permissions
             };
             return acc;
@@ -322,8 +325,8 @@
                 ...(raw.loginAccess || {})
             },
             roleGroups: {
-                ...(raw.roleGroups || {}),
-                ...defaultPermissions.roleGroups
+                ...defaultPermissions.roleGroups,
+                ...(raw.roleGroups || {})
             },
             customModules: normalizeCustomModules(raw.customModules || []),
             groups

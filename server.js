@@ -18,6 +18,7 @@ const io = new Server(server, { cors: { origin: '*' } });
 
 const JWT_SECRET = process.env.JWT_SECRET || 'eduCore_secret_key_2026';
 const PERMISSIONS_FILE = path.join(__dirname, 'permissions.json');
+const DETAILED_PERMISSIONS_FILE = path.join(__dirname, 'permissions-detailed.json');
 const DATE_SHEET_FILE = path.join(__dirname, 'date_sheet.json');
 const ADMIN_CREDENTIALS_FILE = path.join(__dirname, 'admin_credentials.json');
 const PRINCIPAL_USERNAME = process.env.PRINCIPAL_USERNAME || 'principal@school.com';
@@ -214,22 +215,29 @@ function normalizePermissionsConfig(input = {}) {
     customModules.forEach((module) => {
         if (module && module.page) allowedHomePages.add(String(module.page));
     });
-    const groups = Object.keys(defaultPermissions.groups).reduce((acc, key) => {
-        const groupValue = groupsInput[key] || defaultPermissions.groups[key];
+    const groups = Object.entries({
+        ...defaultPermissions.groups,
+        ...groupsInput
+    }).reduce((acc, [key, groupValue]) => {
         const baseGroup = defaultPermissions.groups[key] || {
             name: key,
             homePage: 'dashboard.html',
-            permissions: buildModuleSet('none')
+            permissions: buildModuleSet('none'),
+            actionPermissions: undefined
         };
         const nextGroup = groupValue && typeof groupValue === 'object' ? groupValue : {};
         const requestedHomePage = String(nextGroup.homePage || baseGroup.homePage || 'dashboard.html');
+        const actionPermissions = nextGroup.actionPermissions && typeof nextGroup.actionPermissions === 'object'
+            ? nextGroup.actionPermissions
+            : (baseGroup.actionPermissions && typeof baseGroup.actionPermissions === 'object' ? baseGroup.actionPermissions : undefined);
         acc[key] = {
             name: String(nextGroup.name || baseGroup.name || key),
             homePage: allowedHomePages.has(requestedHomePage) ? requestedHomePage : 'dashboard.html',
             permissions: buildModuleSet('none', {
                 ...baseGroup.permissions,
                 ...(nextGroup.permissions || {})
-            })
+            }),
+            ...(actionPermissions ? { actionPermissions } : {})
         };
         return acc;
     }, {});
@@ -240,8 +248,8 @@ function normalizePermissionsConfig(input = {}) {
             ...(raw.loginAccess || {})
         },
         roleGroups: {
-            ...(raw.roleGroups || {}),
-            ...defaultPermissions.roleGroups
+            ...defaultPermissions.roleGroups,
+            ...(raw.roleGroups || {})
         },
         customModules,
         groups
@@ -524,6 +532,101 @@ function writePermissions(data) {
     return nextPermissions;
 }
 
+function loadDetailedPermissions() {
+    try {
+        if (!fs.existsSync(DETAILED_PERMISSIONS_FILE)) {
+            return { system: {}, designations: {} };
+        }
+
+        const raw = fs.readFileSync(DETAILED_PERMISSIONS_FILE, 'utf8');
+        const parsed = raw ? JSON.parse(raw) : {};
+        return parsed && typeof parsed === 'object' ? parsed : { system: {}, designations: {} };
+    } catch (error) {
+        console.warn('Failed to load detailed permissions:', error.message);
+        return { system: {}, designations: {} };
+    }
+}
+
+function saveDetailedPermissions(data) {
+    const payload = data && typeof data === 'object' ? data : {};
+    fs.writeFileSync(DETAILED_PERMISSIONS_FILE, JSON.stringify(payload, null, 2), 'utf8');
+    return payload;
+}
+
+function normalizeDesignationKey(value) {
+    const raw = String(value || '').trim().toLowerCase();
+    if (!raw) return '';
+    return raw
+        .replace(/[\s-]+/g, '_')
+        .replace(/[^a-z0-9_]/g, '')
+        .replace(/^_+|_+$/g, '');
+}
+
+function checkDesignationActionPermission(designationKey, moduleKey, actionKey) {
+    const detailed = loadDetailedPermissions();
+    const designation = detailed?.designations?.[designationKey];
+    const allowed = designation?.actionPermissions?.[moduleKey]?.[actionKey] === true;
+    return allowed;
+}
+
+async function resolveUserDesignationKey(user = {}) {
+    if (!sequelize) return '';
+    const role = String(user?.role || '').trim();
+    const id = String(user?.id || '').trim();
+    if (!id) return '';
+
+    try {
+        if (role === 'Teacher') {
+            const teacher = await sequelize.models.Teacher.findByPk(id);
+            return normalizeDesignationKey(teacher?.designation || 'teacher');
+        }
+        if (role === 'Staff') {
+            const staff = await sequelize.models.Staff.findByPk(id);
+            return normalizeDesignationKey(staff?.designation || 'staff');
+        }
+        return '';
+    } catch (error) {
+        console.warn('Failed to resolve user designation:', error.message);
+        return '';
+    }
+}
+
+async function enforceActionPermission(req, res, moduleKey, actionKey) {
+    const role = String(req.user?.role || '').trim();
+
+    if (role === 'Admin' || role === 'Principal') return true;
+    if (role === 'Branch') {
+        res.status(403).json({ success: false, message: 'Branch access denied.' });
+        return false;
+    }
+    if (role === 'Student') {
+        res.status(403).json({ success: false, message: 'Student access denied.' });
+        return false;
+    }
+
+    if (role === 'Teacher' || role === 'Staff') {
+        const designationKey = await resolveUserDesignationKey(req.user);
+        if (!designationKey) {
+            res.status(403).json({ success: false, message: 'Designation not set. Ask admin to assign a designation.' });
+            return false;
+        }
+
+        const allowed = checkDesignationActionPermission(designationKey, moduleKey, actionKey);
+        if (!allowed) {
+            res.status(403).json({
+                success: false,
+                message: `Permission denied: ${designationKey} cannot ${actionKey} in ${moduleKey}.`
+            });
+            return false;
+        }
+
+        return true;
+    }
+
+    // Keep legacy behavior for other roles (e.g., Branch) unless explicitly restricted.
+    return true;
+}
+
 function getDefaultAdminCredentials() {
     return {
         username: process.env.ADMIN_USERNAME || 'Myownschool',
@@ -608,10 +711,80 @@ app.get('/api/permissions', (req, res) => {
 
 app.post('/api/permissions', (req, res) => {
     try {
+        verifyAdminAccessToken(req);
         const saved = writePermissions(req.body || {});
         res.json({ success: true, permissions: saved });
     } catch (error) {
-        res.status(500).json({ success: false, message: 'Failed to save permissions.' });
+        res.status(error.statusCode || 500).json({ success: false, message: error.message || 'Failed to save permissions.' });
+    }
+});
+
+app.get('/api/designation-permissions', authenticateToken, async (req, res) => {
+    try {
+        const designationParam = req.query?.designation;
+        const actionParam = req.query?.action;
+        const designationKey = normalizeDesignationKey(designationParam);
+
+        if (designationKey && actionParam) {
+            const [moduleKeyRaw, actionKeyRaw] = String(actionParam).split('.');
+            const moduleKey = String(moduleKeyRaw || '').trim();
+            const actionKey = String(actionKeyRaw || '').trim();
+            const allowed = moduleKey && actionKey
+                ? checkDesignationActionPermission(designationKey, moduleKey, actionKey)
+                : false;
+            return res.json({ allowed });
+        }
+
+        if (designationKey) {
+            const detailed = loadDetailedPermissions();
+            const perms = detailed?.designations?.[designationKey] || null;
+            return res.json(perms || { key: designationKey, name: designationKey, description: '', actionPermissions: {} });
+        }
+
+        verifyAdminAccessToken(req);
+        const detailed = loadDetailedPermissions();
+        const designations = Object.entries(detailed?.designations || {}).map(([key, value]) => ({
+            key,
+            name: value?.name || key,
+            description: value?.description || ''
+        }));
+
+        return res.json({
+            designations,
+            permissions: detailed?.designations || {}
+        });
+    } catch (error) {
+        return res.status(error.statusCode || 500).json({ success: false, message: error.message || 'Failed to load designation permissions.' });
+    }
+});
+
+app.post('/api/designation-permissions', authenticateToken, (req, res) => {
+    try {
+        verifyAdminAccessToken(req);
+        const body = req.body && typeof req.body === 'object' ? req.body : {};
+        const incomingDesignations = body.permissions && typeof body.permissions === 'object'
+            ? body.permissions
+            : (body.designations && typeof body.designations === 'object' ? body.designations : null);
+
+        const existing = loadDetailedPermissions();
+        const next = incomingDesignations
+            ? { ...(existing || {}), designations: incomingDesignations }
+            : body;
+
+        const saved = saveDetailedPermissions(next);
+        const designations = Object.entries(saved?.designations || {}).map(([key, value]) => ({
+            key,
+            name: value?.name || key,
+            description: value?.description || ''
+        }));
+
+        res.json({
+            success: true,
+            designations,
+            permissions: saved?.designations || {}
+        });
+    } catch (error) {
+        res.status(error.statusCode || 500).json({ success: false, message: error.message || 'Failed to save designation permissions.' });
     }
 });
 
@@ -773,6 +946,7 @@ app.post('/api/login', async (req, res) => {
 
             if (isMatch) {
                 let profileName = user.fullName;
+                let designationKey = '';
 
                 if (user.role === 'Student') {
                     const student = await Student.findByPk(user.profileId);
@@ -780,9 +954,11 @@ app.post('/api/login', async (req, res) => {
                 } else if (user.role === 'Teacher') {
                     const teacher = await Teacher.findByPk(user.profileId);
                     profileName = teacher?.fullName || profileName;
+                    designationKey = normalizeDesignationKey(teacher?.designation || 'teacher');
                 } else if (user.role === 'Staff') {
                     const staff = await sequelize.models.Staff.findByPk(user.profileId);
                     profileName = staff?.fullName || profileName;
+                    designationKey = normalizeDesignationKey(staff?.designation || 'staff');
                 }
 
                 const sessionId = createSessionId(user.role, user.profileId);
@@ -793,7 +969,8 @@ app.post('/api/login', async (req, res) => {
                     role: user.role,
                     username: user.username,
                     campusName: user.campusName || '',
-                    groupKey: user.groupKey || permissions.roleGroups[user.role] || roleKey
+                    groupKey: user.groupKey || permissions.roleGroups[user.role] || roleKey,
+                    ...(designationKey ? { designation: designationKey } : {})
                 };
                 registerActiveSession(req, sessionId, responseUser);
                 return res.json({
@@ -1160,13 +1337,37 @@ app.get('/api/student/me', authenticateToken, async (req, res) => {
     }
 });
 
-app.post('/api/students', async (req, res) => {
+app.post('/api/students', authenticateToken, async (req, res) => {
     if (!sequelize) return res.status(503).json({ error: 'Database offline' });
 
     try {
         const data = Array.isArray(req.body) ? req.body : [req.body];
         const Student = sequelize.models.Student;
         const User = sequelize.models.User;
+
+        const ids = data.map((item) => String(item?.id || '').trim()).filter(Boolean);
+        const existingRows = ids.length
+            ? await Student.findAll({ where: { id: ids }, attributes: ['id'] })
+            : [];
+        const existingIds = new Set(existingRows.map((row) => String(row.id)));
+
+        const needsEdit = data.some((item) => {
+            const id = String(item?.id || '').trim();
+            return id && existingIds.has(id);
+        });
+        const needsAdd = data.some((item) => {
+            const id = String(item?.id || '').trim();
+            return !id || !existingIds.has(id);
+        });
+
+        if (needsAdd) {
+            const ok = await enforceActionPermission(req, res, 'students', 'add');
+            if (!ok) return;
+        }
+        if (needsEdit) {
+            const ok = await enforceActionPermission(req, res, 'students', 'edit');
+            if (!ok) return;
+        }
 
         for (const item of data) {
             const normalizedUsername = String(item.username || '').trim();
@@ -1203,6 +1404,39 @@ app.post('/api/students', async (req, res) => {
         res.json({ success: true });
     } catch (err) {
         res.status(500).json({ error: err.message });
+    }
+});
+
+app.delete('/api/students/:id', authenticateToken, async (req, res) => {
+    if (!sequelize) return res.status(503).json({ error: 'Database offline' });
+
+    try {
+        const ok = await enforceActionPermission(req, res, 'students', 'delete');
+        if (!ok) return;
+
+        const { id } = req.params;
+        const Student = sequelize.models.Student;
+        const User = sequelize.models.User;
+
+        const deletedCount = await Student.destroy({ where: { id } });
+        await User.destroy({
+            where: {
+                [Op.or]: [
+                    { profileId: id, role: 'Student' },
+                    { id: `student_${id}` }
+                ]
+            }
+        });
+
+        if (!deletedCount) {
+            return res.status(404).json({ success: false, message: 'Student not found.' });
+        }
+
+        const allStudents = await Student.findAll();
+        io.emit('students_update', allStudents);
+        res.json({ success: true, message: 'Student deleted successfully.' });
+    } catch (err) {
+        res.status(500).json({ success: false, error: err.message });
     }
 });
 
@@ -1266,35 +1500,6 @@ app.post('/api/student-attendance', async (req, res) => {
     }
 });
 
-app.delete('/api/students/:id', async (req, res) => {
-    if (!sequelize) return res.status(503).json({ error: 'Database offline' });
-
-    try {
-        const { id } = req.params;
-        const Student = sequelize.models.Student;
-        const User = sequelize.models.User;
-
-        const deletedCount = await Student.destroy({ where: { id } });
-        await User.destroy({
-            where: {
-                [Op.or]: [
-                    { profileId: id, role: 'Student' },
-                    { id: `student_${id}` }
-                ]
-            }
-        });
-
-        if (!deletedCount) {
-            return res.status(404).json({ success: false, message: 'Student not found.' });
-        }
-
-        const allStudents = await Student.findAll();
-        io.emit('students_update', allStudents);
-        res.json({ success: true, message: 'Student deleted successfully.' });
-    } catch (err) {
-        res.status(500).json({ success: false, error: err.message });
-    }
-});
 
 app.get('/api/teacher-attendance', async (req, res) => {
     if (!sequelize) return res.status(503).json({ success: false, message: 'Database offline' });
@@ -1533,13 +1738,37 @@ app.get('/api/staff', async (req, res) => {
     }
 });
 
-app.post('/api/teachers', async (req, res) => {
+app.post('/api/teachers', authenticateToken, async (req, res) => {
     if (!sequelize) return res.status(503).json({ error: 'Database offline' });
 
     try {
         const data = Array.isArray(req.body) ? req.body : [req.body];
         const Teacher = sequelize.models.Teacher;
         const User = sequelize.models.User;
+
+        const ids = data.map((item) => String(item?.id || '').trim()).filter(Boolean);
+        const existingRows = ids.length
+            ? await Teacher.findAll({ where: { id: ids }, attributes: ['id'] })
+            : [];
+        const existingIds = new Set(existingRows.map((row) => String(row.id)));
+
+        const needsEdit = data.some((item) => {
+            const id = String(item?.id || '').trim();
+            return id && existingIds.has(id);
+        });
+        const needsAdd = data.some((item) => {
+            const id = String(item?.id || '').trim();
+            return !id || !existingIds.has(id);
+        });
+
+        if (needsAdd) {
+            const ok = await enforceActionPermission(req, res, 'teachers', 'add');
+            if (!ok) return;
+        }
+        if (needsEdit) {
+            const ok = await enforceActionPermission(req, res, 'teachers', 'edit');
+            if (!ok) return;
+        }
 
         for (const item of data) {
             const rawPassword = item.plainPassword || item.password || '';
@@ -1583,10 +1812,13 @@ app.post('/api/teachers', async (req, res) => {
     }
 });
 
-app.delete('/api/teachers/:id', async (req, res) => {
+app.delete('/api/teachers/:id', authenticateToken, async (req, res) => {
     if (!sequelize) return res.status(503).json({ error: 'Database offline' });
 
     try {
+        const ok = await enforceActionPermission(req, res, 'teachers', 'delete');
+        if (!ok) return;
+
         const { id } = req.params;
         const Teacher = sequelize.models.Teacher;
         const User = sequelize.models.User;
@@ -1620,13 +1852,37 @@ app.delete('/api/teachers/:id', async (req, res) => {
     }
 });
 
-app.post('/api/staff', async (req, res) => {
+app.post('/api/staff', authenticateToken, async (req, res) => {
     if (!sequelize) return res.status(503).json({ error: 'Database offline' });
 
     try {
         const data = Array.isArray(req.body) ? req.body : [req.body];
         const Staff = sequelize.models.Staff;
         const User = sequelize.models.User;
+
+        const ids = data.map((item) => String(item?.id || '').trim()).filter(Boolean);
+        const existingRows = ids.length
+            ? await Staff.findAll({ where: { id: ids }, attributes: ['id'] })
+            : [];
+        const existingIds = new Set(existingRows.map((row) => String(row.id)));
+
+        const needsEdit = data.some((item) => {
+            const id = String(item?.id || '').trim();
+            return id && existingIds.has(id);
+        });
+        const needsAdd = data.some((item) => {
+            const id = String(item?.id || '').trim();
+            return !id || !existingIds.has(id);
+        });
+
+        if (needsAdd) {
+            const ok = await enforceActionPermission(req, res, 'staff', 'add');
+            if (!ok) return;
+        }
+        if (needsEdit) {
+            const ok = await enforceActionPermission(req, res, 'staff', 'edit');
+            if (!ok) return;
+        }
 
         for (const item of data) {
             const rawPassword = item.plainPassword || item.password || '';
@@ -1660,10 +1916,13 @@ app.post('/api/staff', async (req, res) => {
     }
 });
 
-app.delete('/api/staff/:id', async (req, res) => {
+app.delete('/api/staff/:id', authenticateToken, async (req, res) => {
     if (!sequelize) return res.status(503).json({ error: 'Database offline' });
 
     try {
+        const ok = await enforceActionPermission(req, res, 'staff', 'delete');
+        if (!ok) return;
+
         const { id } = req.params;
         const Staff = sequelize.models.Staff;
         const User = sequelize.models.User;

@@ -22,6 +22,7 @@ const MODULE_KEYS = [
     'student_attendance_report',
     'teacher_attendance_report',
     'notifications',
+    'special_notices',
     'exams',
     'revenue',
     'settings',
@@ -568,6 +569,90 @@ async function createChallanToken(req, payload) {
     return { token, paymentUrl, qrDataUrl };
 }
 
+// Designation-based permission functions
+function loadDetailedPermissions() {
+    const permissionsPath = path.join(process.cwd(), 'permissions-detailed.json');
+    try {
+        if (fs.existsSync(permissionsPath)) {
+            const data = fs.readFileSync(permissionsPath, 'utf8');
+            return JSON.parse(data);
+        }
+    } catch (error) {
+        console.error('Error loading detailed permissions:', error.message);
+    }
+    return { system: {}, designations: {} };
+}
+
+async function getUserDesignation(db, userId) {
+    try {
+        const { Teacher, Staff } = db.models;
+        
+        // Check if user is a teacher
+        const teacher = await Teacher.findOne({
+            where: { username: userId }
+        });
+        if (teacher) return teacher.designation || 'teacher';
+        
+        // Check if user is staff
+        const staff = await Staff.findOne({
+            where: { username: userId }
+        });
+        if (staff) return staff.designation || 'staff';
+        
+        return null;
+    } catch (error) {
+        console.error('Error getting user designation:', error.message);
+        return null;
+    }
+}
+
+function checkActionPermission(designation, module, action) {
+    const permissions = loadDetailedPermissions();
+    const designationPerms = permissions.designations[designation];
+    
+    if (!designationPerms) return false;
+    if (!designationPerms.actionPermissions) return false;
+    
+    const modulePerms = designationPerms.actionPermissions[module];
+    if (!modulePerms) return false;
+    
+    return modulePerms[action] === true;
+}
+
+function getDesignationActions(designation, module) {
+    const permissions = loadDetailedPermissions();
+    const designationPerms = permissions.designations[designation];
+    
+    if (!designationPerms) return {};
+    
+    return designationPerms.actionPermissions[module] || {};
+}
+
+function getAllDesignationPermissions(designation) {
+    const permissions = loadDetailedPermissions();
+    return permissions.designations[designation] || {};
+}
+
+function getAllDesignations() {
+    const permissions = loadDetailedPermissions();
+    return Object.entries(permissions.designations || {}).map(([key, value]) => ({
+        key,
+        name: value.name,
+        description: value.description
+    }));
+}
+
+async function saveDetailedPermissions(data) {
+    const permissionsPath = path.join(process.cwd(), 'permissions-detailed.json');
+    try {
+        fs.writeFileSync(permissionsPath, JSON.stringify(data, null, 2), 'utf8');
+        return true;
+    } catch (error) {
+        console.error('Error saving detailed permissions:', error.message);
+        return false;
+    }
+}
+
 module.exports = {
     JWT_SECRET,
     PRINCIPAL_USERNAME,
@@ -586,5 +671,12 @@ module.exports = {
     savePermissions,
     syncAuthUsers,
     upsertAuthUser,
-    normalizePermissionsConfig
+    normalizePermissionsConfig,
+    loadDetailedPermissions,
+    getUserDesignation,
+    checkActionPermission,
+    getDesignationActions,
+    getAllDesignationPermissions,
+    getAllDesignations,
+    saveDetailedPermissions
 };

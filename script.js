@@ -278,9 +278,13 @@ async function syncToSQL(endpoint, data) {
 
 async function syncToSQLDetailed(endpoint, data) {
     try {
+        const token = sessionStorage.getItem('eduCore_token') || '';
         const response = await fetch(`${API_BASE_URL}/${endpoint}`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: {
+                'Content-Type': 'application/json',
+                ...(token ? { Authorization: `Bearer ${token}` } : {})
+            },
             body: JSON.stringify(data)
         });
 
@@ -307,7 +311,10 @@ function getMissingRecords(localRecords, serverRecords) {
 
 async function initialSQLSync() {
     try {
-        const sRes = await fetch(`${API_BASE_URL}/students`);
+        const token = sessionStorage.getItem('eduCore_token') || '';
+        const authHeaders = token ? { Authorization: `Bearer ${token}` } : {};
+
+        const sRes = await fetch(`${API_BASE_URL}/students`, { headers: authHeaders });
         if (sRes.ok) {
             const data = await sRes.json();
             const mergedStudents = mergeStudentRecords(data);
@@ -319,7 +326,7 @@ async function initialSQLSync() {
             if (typeof renderStudents === 'function') renderStudents();
         }
 
-        const tRes = await fetch(`${API_BASE_URL}/teachers`);
+        const tRes = await fetch(`${API_BASE_URL}/teachers`, { headers: authHeaders });
         if (tRes.ok) {
             const data = await tRes.json();
             const mergedTeachers = mergeTeacherRecords(data);
@@ -331,7 +338,7 @@ async function initialSQLSync() {
             if (typeof renderTeachers === 'function') renderTeachers();
         }
 
-        const staffRes = await fetch(`${API_BASE_URL}/staff`);
+        const staffRes = await fetch(`${API_BASE_URL}/staff`, { headers: authHeaders });
         if (staffRes.ok) {
             const data = await staffRes.json();
             const mergedStaff = mergeStaffRecords(data);
@@ -447,12 +454,22 @@ async function saveTeacherAttendanceToSQLRecord(teacherId, date, status) {
 document.addEventListener('DOMContentLoaded', () => {
 
     // Perform initial sync from SQL Server
-    initialSQLSync();
+    if (sessionStorage.getItem('eduCore_token')) {
+        initialSQLSync();
+    }
     ensureBranchRegistrationNav();
     ensureAttendanceNav();
     ensureNotificationsNav();
     ensureSpecialNoticesNav();
     applyBranchScopedStudentsView();
+    if (sessionStorage.getItem('eduCore_token')) {
+        loadDesignationPermissionsForCurrentUser()
+            .catch(() => null)
+            .finally(() => {
+                applyStudentActionPermissions();
+                if (typeof renderStudents === 'function') renderStudents();
+            });
+    }
 
     // === INIT ICONS ===
     if (typeof lucide !== 'undefined' && window.lucide && window.lucide.createIcons) {
@@ -1301,6 +1318,107 @@ function getLoggedInUser() {
     }
 }
 
+function normalizeDesignationKey(value) {
+    const raw = String(value || '').trim().toLowerCase();
+    if (!raw) return '';
+    return raw
+        .replace(/[\s-]+/g, '_')
+        .replace(/[^a-z0-9_]/g, '')
+        .replace(/^_+|_+$/g, '');
+}
+
+function getCurrentUserDesignationKey() {
+    const user = getLoggedInUser();
+    if (!user) return '';
+    if (user.role !== 'Teacher' && user.role !== 'Staff') return '';
+    return normalizeDesignationKey(user.designation || user.role);
+}
+
+function getCachedDesignationPermissions(designationKey) {
+    if (!designationKey) return null;
+    const cacheKey = `eduCore_designation_permissions:${designationKey}`;
+    try {
+        const raw = sessionStorage.getItem(cacheKey);
+        return raw ? JSON.parse(raw) : null;
+    } catch (error) {
+        return null;
+    }
+}
+
+function cacheDesignationPermissions(designationKey, payload) {
+    if (!designationKey) return;
+    const cacheKey = `eduCore_designation_permissions:${designationKey}`;
+    try {
+        sessionStorage.setItem(cacheKey, JSON.stringify(payload || null));
+    } catch (_error) {
+        // ignore storage failures
+    }
+}
+
+async function loadDesignationPermissionsForCurrentUser() {
+    const designationKey = getCurrentUserDesignationKey();
+    if (!designationKey) return null;
+
+    const cached = getCachedDesignationPermissions(designationKey);
+    if (cached) return cached;
+
+    const token = sessionStorage.getItem('eduCore_token') || '';
+    if (!token) return null;
+
+    const response = await fetch(`${API_BASE_URL}/designation-permissions?designation=${encodeURIComponent(designationKey)}`, {
+        headers: { Authorization: `Bearer ${token}` }
+    });
+    const result = await parseJsonResponse(response, 'Failed to load designation permissions.');
+    if (!response.ok) {
+        throw new Error(result?.message || 'Failed to load designation permissions.');
+    }
+
+    cacheDesignationPermissions(designationKey, result);
+    return result;
+}
+
+function canCurrentUserPerformAction(moduleKey, actionKey) {
+    const user = getLoggedInUser();
+    if (!user) return false;
+
+    if (user.role === 'Admin' || user.role === 'Principal') return true;
+
+    // Branch is handled separately (hard-restricted in UI).
+    if (user.role === 'Branch') return false;
+
+    if (user.role === 'Teacher' || user.role === 'Staff') {
+        const designationKey = getCurrentUserDesignationKey();
+        const designationPerms = getCachedDesignationPermissions(designationKey);
+        return designationPerms?.actionPermissions?.[moduleKey]?.[actionKey] === true;
+    }
+
+    return false;
+}
+
+function ensureDesignationPermissionsNav() {
+    const navLinks = document.querySelector('.nav-links');
+    const loggedInUser = getLoggedInUser();
+    if (!navLinks || !loggedInUser || loggedInUser.role !== 'Admin') return;
+    if (navLinks.querySelector('[data-designation-permissions-link]')) return;
+
+    const permissionsLink = Array.from(navLinks.querySelectorAll('a[href]'))
+        .find((link) => normalizeClientPageName(link.getAttribute('href') || '') === 'permissions.html');
+
+    const designationLink = document.createElement('a');
+    designationLink.href = toRoutePath('designation-permissions.html');
+    designationLink.className = 'nav-item';
+    designationLink.dataset.designationPermissionsLink = 'true';
+    designationLink.innerHTML = '<i data-lucide="shield-check"></i><span>Designation Permissions</span>';
+
+    if (permissionsLink) {
+        permissionsLink.insertAdjacentElement('afterend', designationLink);
+    } else {
+        navLinks.appendChild(designationLink);
+    }
+
+    if (window.lucide) window.lucide.createIcons();
+}
+
 function ensureBranchRegistrationNav() {
     const navLinks = document.querySelector('.nav-links');
     const loggedInUser = getLoggedInUser();
@@ -1591,6 +1709,27 @@ function applyBranchScopedStudentsView() {
     const headerTitle = document.querySelector('.header h1');
     if (headerTitle && allowedCampus) {
         headerTitle.textContent = `${allowedCampus} Students`;
+    }
+}
+
+function applyStudentActionPermissions() {
+    if (!isCurrentPage('students.html')) return;
+
+    const loggedInUser = getLoggedInUser();
+    if (!loggedInUser) return;
+
+    if (loggedInUser.role !== 'Teacher' && loggedInUser.role !== 'Staff') return;
+
+    const canAdd = canCurrentUserPerformAction('students', 'add');
+    const addStudentButton = document.querySelector('.student-toolbar > .btn.btn-primary');
+    const formContainer = document.getElementById('studentFormContainer');
+
+    if (addStudentButton) {
+        addStudentButton.style.display = canAdd ? '' : 'none';
+    }
+
+    if (!canAdd && formContainer) {
+        formContainer.style.display = 'none';
     }
 }
 
@@ -2413,6 +2552,19 @@ function toggleStudentForm(editMode = false) {
     const container = document.getElementById('studentFormContainer');
     const form = document.getElementById('studentForm');
     const title = document.getElementById('formTitle');
+    const loggedInUser = getLoggedInUser();
+
+    if (editMode) {
+        if (!canCurrentUserPerformAction('students', 'edit')) {
+            showAppAlert('You do not have permission to edit students.', 'Permission Denied');
+            return;
+        }
+    } else if (loggedInUser?.role === 'Teacher' || loggedInUser?.role === 'Staff') {
+        if (!canCurrentUserPerformAction('students', 'add')) {
+            showAppAlert('You do not have permission to add students.', 'Permission Denied');
+            return;
+        }
+    }
 
     if (container.style.display === 'block' && !editMode) {
         container.style.display = 'none';
@@ -2498,6 +2650,19 @@ async function handleStudentFormSubmit(e) {
     e.preventDefault();
     const idField = document.getElementById('studentId');
     const isEdit = idField.value !== '';
+    const loggedInUser = getLoggedInUser();
+
+    if (isEdit) {
+        if (!canCurrentUserPerformAction('students', 'edit')) {
+            showAppAlert('You do not have permission to edit students.', 'Permission Denied');
+            return;
+        }
+    } else if (loggedInUser?.role === 'Teacher' || loggedInUser?.role === 'Staff') {
+        if (!canCurrentUserPerformAction('students', 'add')) {
+            showAppAlert('You do not have permission to add students.', 'Permission Denied');
+            return;
+        }
+    }
 
     const existingStudents = getData(STORAGE_KEY_STUDENTS);
     const existingStudent = isEdit ? existingStudents.find(s => s.id === idField.value) : null;
@@ -2568,7 +2733,12 @@ async function handleStudentFormSubmit(e) {
     } else {
         students.push(newStudent);
     }
-    saveData(STORAGE_KEY_STUDENTS, students);
+    saveData(STORAGE_KEY_STUDENTS, students, { skipSync: true });
+    syncToSQLDetailed('students', [newStudent]).then((syncResult) => {
+        if (!syncResult.success) {
+            console.warn('Student SQL sync failed:', syncResult.error);
+        }
+    });
 
     pushNotification('Student Updated', `Account for "${newStudent.fullName}" saved and activated.`, 'user');
     toggleStudentForm();
@@ -2622,11 +2792,19 @@ function handleStudentActionSelect(selectElement, encodedPayload, studentId, isB
     }
 
     if (action === 'edit') {
+        if (!canCurrentUserPerformAction('students', 'edit')) {
+            showAppAlert('You do not have permission to edit students.', 'Permission Denied');
+            return;
+        }
         editStudentFromEncoded(encodedPayload);
         return;
     }
 
     if (action === 'delete') {
+        if (!canCurrentUserPerformAction('students', 'delete')) {
+            showAppAlert('You do not have permission to delete students.', 'Permission Denied');
+            return;
+        }
         deleteStudent(studentId);
     }
 }
@@ -2695,6 +2873,9 @@ function renderStudents(term = '') {
     const searchInput = document.getElementById('studentSearchInput');
     const quickFilter = document.getElementById('studentQuickFilter');
     const loggedInUser = getLoggedInUser();
+    const isBranchUser = loggedInUser?.role === 'Branch';
+    const canEditStudents = !isBranchUser && canCurrentUserPerformAction('students', 'edit');
+    const canDeleteStudents = !isBranchUser && canCurrentUserPerformAction('students', 'delete');
 
     if (typeof term !== 'string') {
         term = searchInput ? searchInput.value.toLowerCase().trim() : '';
@@ -2762,12 +2943,11 @@ function renderStudents(term = '') {
                 <td>${s.gender || '-'}</td>
                 <td><span class="status-badge ${statusClass}">${s.feesStatus}</span></td>
                 <td><div class="table-action-wrap">
-                    <select class="table-action-select" onchange="handleStudentActionSelect(this, '${encodedStudent}', '${s.id}', ${loggedInUser?.role === 'Branch' ? 1 : 0})">
+                    <select class="table-action-select" onchange="handleStudentActionSelect(this, '${encodedStudent}', '${s.id}', ${isBranchUser ? 1 : 0})">
                         <option value="">Actions</option>
                         <option value="view">View</option>
-                        ${loggedInUser?.role === 'Branch' ? '' : `
-                        <option value="edit">Edit</option>
-                        <option value="delete">Delete</option>`}
+                        ${canEditStudents ? '<option value="edit">Edit</option>' : ''}
+                        ${canDeleteStudents ? '<option value="delete">Delete</option>' : ''}
                     </select>
                 </div>
                 </td>
@@ -2867,6 +3047,10 @@ function editStudent(s) {
 }
 
 async function deleteStudent(id) {
+    if (!canCurrentUserPerformAction('students', 'delete')) {
+        showAppAlert('You do not have permission to delete students.', 'Permission Denied');
+        return;
+    }
     if (!(await showAppConfirm('Delete this student?'))) return;
 
     let students = getData(STORAGE_KEY_STUDENTS);
@@ -2876,8 +3060,10 @@ async function deleteStudent(id) {
     renderStudents();
 
     try {
+        const token = sessionStorage.getItem('eduCore_token') || '';
         const response = await fetch(`${API_BASE_URL}/students/${id}`, {
-            method: 'DELETE'
+            method: 'DELETE',
+            headers: token ? { Authorization: `Bearer ${token}` } : {}
         });
 
         if (response.status === 503) {
@@ -3312,8 +3498,10 @@ async function deleteTeacher(id) {
     saveData(STORAGE_KEY_TEACHERS, updatedTeachers, { skipSync: true });
     renderTeachers();
 
+    const token = sessionStorage.getItem('eduCore_token') || '';
     fetch(`${API_BASE_URL}/teachers/${id}`, {
-        method: 'DELETE'
+        method: 'DELETE',
+        headers: token ? { Authorization: `Bearer ${token}` } : {}
     })
         .then(async (response) => {
             if (response.status === 503) {
@@ -3565,7 +3753,11 @@ async function handleStaffFormSubmit(e) {
     } else {
         staff.push(newStaff);
     }
-    saveData(STORAGE_KEY_STAFF, staff);
+    saveData(STORAGE_KEY_STAFF, staff, { skipSync: true });
+    const staffSyncResult = await syncToSQLDetailed('staff', [newStaff]);
+    if (!staffSyncResult.success) {
+        alert(staffSyncResult.error || 'The staff record was saved to local storage, but database sync failed. Check the server and MySQL connection.');
+    }
     pushNotification('Staff Updated', `Staff record for "${newStaff.fullName}" was added/updated.`, 'user');
     toggleStaffForm();
     renderStaff();
@@ -3695,8 +3887,10 @@ async function deleteStaff(id) {
     saveData(STORAGE_KEY_STAFF, updatedStaff, { skipSync: true });
     renderStaff();
 
+    const token = sessionStorage.getItem('eduCore_token') || '';
     fetch(`${API_BASE_URL}/staff/${id}`, {
-        method: 'DELETE'
+        method: 'DELETE',
+        headers: token ? { Authorization: `Bearer ${token}` } : {}
     })
         .then(async (response) => {
             if (response.status === 503) {

@@ -537,6 +537,10 @@
             display: none;
         }
 
+        .challan-bulk-group + .challan-bulk-group {
+            margin-top: 1rem;
+        }
+
         @media (max-width: 1100px) {
             .challan-layout {
                 grid-template-columns: 1fr;
@@ -604,6 +608,15 @@
 
             .preview-sheet + .preview-sheet {
                 margin-top: 1.2mm;
+            }
+
+            .challan-bulk-group {
+                break-inside: avoid;
+                page-break-inside: avoid;
+            }
+
+            .challan-bulk-group + .challan-bulk-group {
+                margin-top: 3mm;
             }
 
             .challan-paper {
@@ -732,6 +745,15 @@
                                     </select>
                                 </div>
                                 <div class="field-block">
+                                    <label for="challanFeeStatusFilter">Fee Status</label>
+                                    <select id="challanFeeStatusFilter">
+                                        <option value="pending">Pending</option>
+                                        <option value="paid">Paid</option>
+                                        <option value="all">All</option>
+                                    </select>
+                                    <div class="field-help">Bulk print uses class + fee month + due date from this form.</div>
+                                </div>
+                                <div class="field-block">
                                     <label for="challanStudent">Student Name</label>
                                     <select id="challanStudent"></select>
                                 </div>
@@ -816,6 +838,9 @@
                                 <button class="btn btn-outline" type="button" onclick="resetChallanForm()">
                                     <i data-lucide="refresh-cw" size="16"></i>&nbsp;Refresh Preview
                                 </button>
+                                <button class="btn btn-outline" type="button" id="printClassChallanBtn" onclick="printSelectedClassChallans()">
+                                    <i data-lucide="layers" size="16"></i>&nbsp;Print Class Challans
+                                </button>
                                 <button class="btn btn-primary" type="button" id="printChallanBtn" onclick="window.print()">
                                     <i data-lucide="printer" size="16"></i>&nbsp;Print Challan
                                 </button>
@@ -865,6 +890,9 @@
             </div>
             <div class="class-students-list" id="classStudentsList"></div>
             <div class="class-students-footer">
+                <button type="button" class="btn btn-primary" onclick="printSelectedClassChallans()">
+                    Print Class Challans
+                </button>
                 <button type="button" class="btn btn-outline" onclick="hideClassStudentsPopup()">Cancel</button>
             </div>
         </div>
@@ -1072,9 +1100,20 @@
 
         async function mergeChallanFeePaymentsIntoMonthlyStore() {
             try {
-                const response = await fetch(`${API_BASE_URL}/fees/payments`);
-                if (!response.ok) return;
-                const result = await response.json();
+                const endpoints = [
+                    `${API_BASE_URL}/fees/payments`,
+                    `${API_BASE_URL}/fees`
+                ];
+
+                let result = null;
+                for (const endpoint of endpoints) {
+                    const response = await fetch(endpoint);
+                    if (!response.ok) continue;
+                    result = await response.json();
+                    break;
+                }
+
+                if (!result) return;
                 const payments = Array.isArray(result.payments) ? result.payments : [];
                 const monthlyFees = JSON.parse(localStorage.getItem(CHALLAN_MONTHLY_FEES_KEY) || '{}');
 
@@ -1571,11 +1610,14 @@
 
         function buildPreviewMarkup(data) {
             return `
-                ${printCopies.map(copy => buildPrintMarkup(data, copy)).join('')}
+                ${printCopies.map(copy => buildPrintMarkup(data, copy, challanQrState)).join('')}
             `;
         }
 
-        function buildPrintMarkup(data, copyLabel) {
+        function buildPrintMarkup(data, copyLabel, qrState = {}) {
+            const qrStatus = qrState?.status || challanQrState?.status || '';
+            const qrImageUrl = qrState?.qrImageUrl || challanQrState?.qrImageUrl || '';
+            const qrFallbackLabel = qrState?.fallbackLabel || (qrStatus === 'Paid' ? 'Paid' : 'QR unavailable');
             return `
                 <section class="preview-sheet">
                     <div class="challan-paper">
@@ -1646,12 +1688,12 @@
                             </tr>
                             <tr>
                                 <td colspan="4" class="challan-qr-note">
-                                    ${escapeHtml(challanQrState.status || `Scan QR to mark ${data.feeMonth} as paid.`)}
+                                    ${escapeHtml(qrStatus || `Scan QR to mark ${data.feeMonth} as paid.`)}
                                 </td>
                                 <td colspan="2" class="challan-qr-cell">
-                                    ${challanQrState.qrImageUrl
-                                        ? `<img src="${escapeHtml(challanQrState.qrImageUrl)}" alt="Fee payment QR code">`
-                                        : '<span>QR unavailable</span>'}
+                                    ${qrImageUrl
+                                        ? `<img src="${escapeHtml(qrImageUrl)}" alt="Fee payment QR code">`
+                                        : `<span>${escapeHtml(qrFallbackLabel)}</span>`}
                                 </td>
                             </tr>
                         </table>
@@ -1663,6 +1705,213 @@
                     </div>
                 </section>
             `;
+        }
+
+        function buildBulkGroupMarkup(data, qrState) {
+            return `
+                <div class="challan-bulk-group">
+                    ${printCopies.map(copy => buildPrintMarkup(data, copy, qrState)).join('')}
+                </div>
+            `;
+        }
+
+        function buildChallanKeyPart(value) {
+            return String(value || '')
+                .toLowerCase()
+                .replace(/[^a-z0-9]+/g, '')
+                .trim();
+        }
+
+        function generateBulkChallanNumber(student, feeMonthLabel) {
+            const feeKey = buildChallanKeyPart(feeMonthLabel) || buildChallanKeyPart(new Date().getFullYear());
+            const studentKeySource = student?.id || student?.studentCode || student?.rollNo || '';
+            const studentKey = buildChallanKeyPart(studentKeySource).slice(-16) || String(Date.now()).slice(-6);
+            return `CH-${feeKey}-${studentKey}`;
+        }
+
+        function isStudentPaidForMonth(student, feeMonthLabel) {
+            const monthKey = getChallanLongMonthName(feeMonthLabel);
+            if (!monthKey) return false;
+            const monthlyFees = JSON.parse(localStorage.getItem(CHALLAN_MONTHLY_FEES_KEY) || '{}');
+            const studentMonthly = monthlyFees[student?.id] || {};
+            return studentMonthly[monthKey] === 'Paid';
+        }
+
+        async function printSelectedClassChallans() {
+            const classFilter = document.getElementById('challanClassFilter');
+            const selectedClass = normalizeClassLabel(classFilter ? classFilter.value : '');
+            const statusFilter = String(document.getElementById('challanFeeStatusFilter')?.value || 'pending').toLowerCase();
+
+            if (!selectedClass) {
+                alert('Please select a class to print challans.');
+                return;
+            }
+
+            const classStudents = getFilteredChallanStudentsBySelectedClass();
+            if (!classStudents.length) {
+                alert('No students found for the selected class.');
+                return;
+            }
+
+            const feeMonthInput = document.getElementById('feeMonth').value.trim();
+            const safeFeeMonthInput = feeMonthInput && feeMonthInput.toLowerCase() !== 'paid' ? feeMonthInput : '';
+            const feeMonthLabel = safeFeeMonthInput
+                || document.getElementById('challanMonth').value.trim()
+                || new Date().toLocaleDateString('en-GB', { month: 'short', year: 'numeric' }).replace(' ', ', ');
+            const challanMonthLabel = document.getElementById('challanMonth').value.trim() || feeMonthLabel;
+            const dueDateRaw = document.getElementById('dueDate').value;
+
+            if (!feeMonthLabel || feeMonthLabel.toLowerCase() === 'paid') {
+                alert('Please enter a valid fee month (e.g., "Mar, 2026").');
+                return;
+            }
+            if (!dueDateRaw) {
+                alert('Please select a due date before bulk printing.');
+                return;
+            }
+
+            const dueDateLabel = formatDate(dueDateRaw);
+            const sessionLabel = document.getElementById('challanSession').value.trim() || '-';
+
+            const baseAmountFallback = Number(document.getElementById('baseAmount').value || 0);
+            const additionalCharges = Number(document.getElementById('additionalCharges').value || 0);
+            const discountInput = document.getElementById('discountValue').value.trim();
+            const numericDiscount = Number(discountInput);
+            const discountAmount = Number.isNaN(numericDiscount) ? 0 : numericDiscount;
+
+            const particulars = document.getElementById('particulars').value.trim() || 'Tuition Fee';
+            const schoolName = document.getElementById('schoolName').value.trim() || 'My own Science school';
+            const schoolAddress = document.getElementById('schoolAddress').value.trim() || `${CHALLAN_BRANCH_CONTACTS.main.campusLabel} - ${CHALLAN_BRANCH_CONTACTS.main.addressLine}`;
+            const urduNote = document.getElementById('urduNote').value.trim() || '';
+            const notes = document.getElementById('challanNotes').value.trim() || 'No additional instructions.';
+
+            const items = [];
+            const challans = [];
+
+            for (const student of classStudents) {
+                const paidForMonth = isStudentPaidForMonth(student, feeMonthLabel);
+                if (statusFilter === 'pending' && paidForMonth) continue;
+                if (statusFilter === 'paid' && !paidForMonth) continue;
+
+                const monthlyFee = parseInt(student?.monthlyFee || 0, 10) || 0;
+                const baseAmount = monthlyFee || baseAmountFallback;
+                const totalDue = Math.max(baseAmount + additionalCharges - discountAmount, 0);
+
+                const challanNumber = generateBulkChallanNumber(student, feeMonthLabel);
+                const generatedStudentId = student?.studentCode || student?.id || student?.rollNo || '';
+
+                const data = {
+                    studentId: student?.id || '',
+                    challanNumber,
+                    studentName: student?.fullName || 'Student',
+                    sid: generatedStudentId || '-',
+                    admissionNo: generatedStudentId || '-',
+                    classSection: student?.classGrade || selectedClass || '-',
+                    rollNo: student?.rollNo || '-',
+                    fatherName: student?.fatherName || '-',
+                    fatherMobile: student?.parentPhone || student?.phone || student?.fatherMobile || '-',
+                    session: sessionLabel,
+                    challanMonth: challanMonthLabel,
+                    feeMonth: feeMonthLabel,
+                    dueDate: dueDateLabel,
+                    baseAmount,
+                    additionalCharges,
+                    discountLabel: discountInput || '0',
+                    discountAmount,
+                    particulars,
+                    schoolName,
+                    schoolAddress,
+                    urduNote,
+                    notes,
+                    totalDue
+                };
+
+                const needsQr = !paidForMonth && totalDue > 0;
+                const qrState = paidForMonth
+                    ? { paymentUrl: '', qrImageUrl: '', status: 'Paid', fallbackLabel: 'Paid' }
+                    : (totalDue <= 0
+                        ? { paymentUrl: '', qrImageUrl: '', status: 'No due amount', fallbackLabel: 'No Due' }
+                        : { paymentUrl: '', qrImageUrl: '', status: `Generating QR for ${feeMonthLabel}...`, fallbackLabel: 'QR' });
+
+                challans.push({ data, qrState, needsQr });
+
+                if (needsQr) {
+                    items.push({
+                        studentId: data.studentId,
+                        studentName: data.studentName,
+                        rollNo: data.rollNo,
+                        classGrade: data.classSection,
+                        feeMonth: data.feeMonth,
+                        session: data.session,
+                        amount: data.totalDue,
+                        challanNumber: data.challanNumber
+                    });
+                }
+            }
+
+            if (!challans.length) {
+                alert('No students match the selected status filter.');
+                return;
+            }
+
+            const printSheet = document.getElementById('printSheet');
+            const previousPrintHtml = printSheet.innerHTML;
+
+            const btn = document.getElementById('printClassChallanBtn');
+            const btnPrev = btn ? btn.innerHTML : '';
+            if (btn) {
+                btn.disabled = true;
+                btn.innerHTML = '<i data-lucide="loader" size="16"></i>&nbsp;Preparing...';
+                if (window.lucide && window.lucide.createIcons) window.lucide.createIcons();
+            }
+
+            try {
+                if (items.length) {
+                    const response = await fetch(`${API_BASE_URL}/fees/challan-tokens`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ items })
+                    });
+
+                    const result = await response.json().catch(() => ({}));
+                    if (response.ok && result?.success && Array.isArray(result.tokens)) {
+                        const tokenMap = new Map(result.tokens.map(token => [token.challanNumber, token]));
+                        challans.forEach((row) => {
+                            if (!row.needsQr) return;
+                            const token = tokenMap.get(row.data.challanNumber);
+                            if (!token?.qrDataUrl) {
+                                row.qrState = { paymentUrl: '', qrImageUrl: '', status: 'QR could not be generated', fallbackLabel: 'QR' };
+                                return;
+                            }
+                            row.qrState = {
+                                paymentUrl: token.paymentUrl || '',
+                                qrImageUrl: token.qrDataUrl || '',
+                                status: `Scanning will automatically mark ${row.data.feeMonth} fee as paid.`,
+                                fallbackLabel: 'QR'
+                            };
+                        });
+                    } else {
+                        challans.forEach((row) => {
+                            if (row.needsQr) {
+                                row.qrState = { paymentUrl: '', qrImageUrl: '', status: 'QR could not be generated', fallbackLabel: 'QR' };
+                            }
+                        });
+                    }
+                }
+
+                printSheet.innerHTML = challans.map(row => buildBulkGroupMarkup(row.data, row.qrState)).join('');
+                hideClassStudentsPopup();
+                window.print();
+            } catch (error) {
+                alert(error?.message || 'Bulk challans could not be generated.');
+            } finally {
+                printSheet.innerHTML = previousPrintHtml;
+                if (btn) {
+                    btn.disabled = false;
+                    btn.innerHTML = btnPrev;
+                    if (window.lucide && window.lucide.createIcons) window.lucide.createIcons();
+                }
+            }
         }
 
         function isDiscountNumeric(value) {

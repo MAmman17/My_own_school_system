@@ -1607,6 +1607,77 @@ app.post('/api/fees/challan-token', async (req, res) => {
     }
 });
 
+app.post('/api/fees/challan-tokens', async (req, res) => {
+    try {
+        const payload = req.body;
+        const items = Array.isArray(payload) ? payload : payload?.items;
+
+        if (!Array.isArray(items) || !items.length) {
+            return res.status(400).json({ success: false, message: 'items array is required.' });
+        }
+
+        if (items.length > 250) {
+            return res.status(400).json({ success: false, message: 'Too many challans requested at once.' });
+        }
+
+        const baseUrl = getRequestBaseUrl(req);
+
+        const mapWithConcurrency = async (list, limit, mapper) => {
+            const results = new Array(list.length);
+            let index = 0;
+
+            const workerCount = Math.min(limit, list.length);
+            const workers = Array.from({ length: workerCount }, async () => {
+                while (true) {
+                    const current = index++;
+                    if (current >= list.length) return;
+                    results[current] = await mapper(list[current], current);
+                }
+            });
+
+            await Promise.all(workers);
+            return results;
+        };
+
+        const tokens = await mapWithConcurrency(items, 6, async (item) => {
+            const studentId = String(item?.studentId || '').trim();
+            const feeMonth = String(item?.feeMonth || '').trim();
+            const challanNumber = String(item?.challanNumber || '').trim();
+
+            if (!studentId || !feeMonth || !challanNumber) {
+                const err = new Error('studentId, feeMonth, and challanNumber are required.');
+                err.statusCode = 400;
+                throw err;
+            }
+
+            const token = jwt.sign({
+                studentId,
+                studentName: item?.studentName || '',
+                rollNo: item?.rollNo || '',
+                classGrade: item?.classGrade || '',
+                feeMonth,
+                session: item?.session || '',
+                amount: Number(item?.amount || 0),
+                challanNumber
+            }, JWT_SECRET, { expiresIn: '120d' });
+
+            const paymentUrl = `${baseUrl}/api/fees/pay/${encodeURIComponent(token)}`;
+            const qrDataUrl = await QRCode.toDataURL(paymentUrl, {
+                errorCorrectionLevel: 'M',
+                margin: 1,
+                width: 220
+            });
+
+            return { challanNumber, token, paymentUrl, qrDataUrl };
+        });
+
+        return res.json({ success: true, tokens });
+    } catch (error) {
+        const status = error?.statusCode || 500;
+        return res.status(status).json({ success: false, message: error.message || 'Bulk QR code could not be generated.' });
+    }
+});
+
 app.get('/api/fees/payments', async (req, res) => {
     if (!sequelize) {
         return res.status(503).json({ success: false, message: 'Database offline' });

@@ -4076,7 +4076,6 @@ function renderLoginHistory() {
 
 async function loadSettings() {
     const settings = localStorage.getItem(STORAGE_KEY_SETTINGS);
-    const auth = localStorage.getItem(STORAGE_KEY_AUTH);
 
     if (settings) {
         const data = JSON.parse(settings);
@@ -4084,104 +4083,21 @@ async function loadSettings() {
         if (document.getElementById('sSession')) document.getElementById('sSession').value = data.session || '';
         if (document.getElementById('sPhone')) document.getElementById('sPhone').value = data.phone || '';
     }
-
-    const usernameEl = document.getElementById('sAdminUsername');
-    if (!usernameEl) return;
-
-    if (auth) {
-        const authData = JSON.parse(auth);
-        usernameEl.value = authData.username || authData.email || 'Myownschool';
-    }
-
-    const token = sessionStorage.getItem('eduCore_token');
-    if (!token) return;
-
-    try {
-        const response = await fetch(`${API_BASE_URL}/admin-credentials`, {
-            headers: {
-                'Authorization': `Bearer ${token}`
-            }
-        });
-        const result = await response.json();
-        if (!response.ok || !result?.success) return;
-
-        const apiUsername = String(result.credentials?.username || '').trim();
-        if (!apiUsername) return;
-
-        usernameEl.value = apiUsername;
-        const updatedLocalAuth = auth ? JSON.parse(auth) : {};
-        updatedLocalAuth.username = apiUsername;
-        updatedLocalAuth.email = apiUsername;
-        localStorage.setItem(STORAGE_KEY_AUTH, JSON.stringify(updatedLocalAuth));
-    } catch (error) {
-        console.warn('Unable to load admin credentials from API.', error);
-    }
 }
 
 async function handleSettingsSubmit(e) {
     e.preventDefault();
 
-    // 1. Get current auth values
-    const storedAuth = localStorage.getItem(STORAGE_KEY_AUTH);
-    const currentAuth = storedAuth ? JSON.parse(storedAuth) : { username: 'Myownschool', email: 'Myownschool', password: 'myownschool1122' };
-
-    // 2. Save updated settings/auth values
+    // Save settings values
     const settings = {};
     if (document.getElementById('sSchoolName')) settings.schoolName = document.getElementById('sSchoolName').value;
     if (document.getElementById('sSession')) settings.session = document.getElementById('sSession').value;
     if (document.getElementById('sPhone')) settings.phone = document.getElementById('sPhone').value;
 
-    const usernameEl = document.getElementById('sAdminUsername');
-    const passEl = document.getElementById('sPassword');
-    const token = sessionStorage.getItem('eduCore_token');
-
-    const newUsername = usernameEl ? usernameEl.value.trim() : (currentAuth.username || currentAuth.email || '');
-    const newPassword = passEl ? passEl.value.trim() : '';
-
-    if (!newUsername) {
-        alert('Admin username is required.');
-        return;
-    }
-
-    if (token) {
-        try {
-            const response = await fetch(`${API_BASE_URL}/admin-credentials`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${token}`
-                },
-                body: JSON.stringify({
-                    username: newUsername,
-                    password: newPassword || undefined
-                })
-            });
-
-            const result = await response.json();
-            if (!response.ok || !result?.success) {
-                throw new Error(result?.message || 'Failed to update admin credentials.');
-            }
-        } catch (error) {
-            alert(error.message || 'Admin credentials update failed.');
-            return;
-        }
-    }
-
-    const updatedAuth = { ...currentAuth };
-    if (newUsername) {
-        updatedAuth.username = newUsername;
-        updatedAuth.email = newUsername;
-    }
-    if (newPassword) updatedAuth.password = newPassword;
-
     localStorage.setItem(STORAGE_KEY_SETTINGS, JSON.stringify(settings));
-    localStorage.setItem(STORAGE_KEY_AUTH, JSON.stringify(updatedAuth));
 
-    alert('Account Credentials Updated Successfully!');
-    pushNotification('Security Update', 'Admin credentials have been updated.', 'login');
-
-    // Reset security fields
-    if (passEl) passEl.value = '';
+    alert('Settings saved successfully!');
+    pushNotification('Settings Updated', 'Settings have been saved.', 'info');
 
     // Refresh display
     renderLoginHistory();

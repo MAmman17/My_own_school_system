@@ -651,6 +651,7 @@ document.addEventListener('DOMContentLoaded', () => {
         studentForm.addEventListener('submit', handleStudentFormSubmit);
         const studentSearch = document.getElementById('studentSearchInput');
         const quickFilter = document.getElementById('studentQuickFilter');
+        bindStudentQuickFilterMultiSelect();
         if (studentSearch) {
             studentSearch.addEventListener('input', renderStudents);
         }
@@ -2866,6 +2867,284 @@ function viewTeacherAttendanceFromEncoded(encodedPayload) {
     viewTeacherAttendance(payload);
 }
 
+function bindStudentQuickFilterMultiSelect() {
+    const container = document.getElementById('studentQuickFilterMulti');
+    const trigger = document.getElementById('studentQuickFilterTrigger');
+    const menu = document.getElementById('studentQuickFilterMenu');
+    const select = document.getElementById('studentQuickFilter');
+
+    if (!container || !trigger || !menu || !select) return;
+    if (container.dataset.bound === '1') return;
+    container.dataset.bound = '1';
+
+    trigger.addEventListener('click', () => {
+        if (container.classList.contains('disabled')) return;
+        toggleStudentQuickFilterMultiMenu();
+    });
+
+    if (!window.__eduCoreStudentQuickFilterBound) {
+        window.__eduCoreStudentQuickFilterBound = true;
+
+        document.addEventListener('click', (event) => {
+            const active = document.getElementById('studentQuickFilterMulti');
+            if (!active || !active.classList.contains('open')) return;
+            if (active.contains(event.target)) return;
+            closeStudentQuickFilterMultiMenu();
+        }, true);
+
+        document.addEventListener('keydown', (event) => {
+            if (event.key !== 'Escape') return;
+            closeStudentQuickFilterMultiMenu();
+        });
+    }
+}
+
+function openStudentQuickFilterMultiMenu() {
+    const container = document.getElementById('studentQuickFilterMulti');
+    const trigger = document.getElementById('studentQuickFilterTrigger');
+    if (!container || !trigger) return;
+    if (container.classList.contains('disabled')) return;
+    container.classList.add('open');
+    trigger.setAttribute('aria-expanded', 'true');
+}
+
+function closeStudentQuickFilterMultiMenu() {
+    const container = document.getElementById('studentQuickFilterMulti');
+    const trigger = document.getElementById('studentQuickFilterTrigger');
+    if (!container || !trigger) return;
+    container.classList.remove('open');
+    trigger.setAttribute('aria-expanded', 'false');
+}
+
+function toggleStudentQuickFilterMultiMenu() {
+    const container = document.getElementById('studentQuickFilterMulti');
+    if (!container) return;
+    if (container.classList.contains('open')) {
+        closeStudentQuickFilterMultiMenu();
+        return;
+    }
+    openStudentQuickFilterMultiMenu();
+}
+
+function normalizeStudentQuickFilterValues(values) {
+    const uniqueValues = Array.from(new Set((values || []).map((value) => String(value || '').trim()).filter(Boolean)));
+    if (uniqueValues.length === 0) return ['all'];
+
+    if (uniqueValues.includes('all') && uniqueValues.length > 1) {
+        const withoutAll = uniqueValues.filter((value) => value !== 'all');
+        return withoutAll.length ? withoutAll : ['all'];
+    }
+
+    return uniqueValues;
+}
+
+function getStudentQuickFilterSelectedValues(selectElement) {
+    const quickFilter = selectElement || document.getElementById('studentQuickFilter');
+    if (!quickFilter) return ['all'];
+
+    const selected = Array.from(quickFilter.selectedOptions || []).map((option) => option.value);
+    return normalizeStudentQuickFilterValues(selected);
+}
+
+function setStudentQuickFilterSelectedValues(values) {
+    const quickFilter = document.getElementById('studentQuickFilter');
+    if (!quickFilter) return;
+
+    const normalized = normalizeStudentQuickFilterValues(values);
+    const optionByValue = new Map(Array.from(quickFilter.options || []).map((option) => [String(option.value), option]));
+
+    Array.from(optionByValue.values()).forEach((option) => {
+        option.selected = false;
+    });
+
+    let selectedCount = 0;
+    normalized.forEach((value) => {
+        const option = optionByValue.get(String(value));
+        if (!option) return;
+        option.selected = true;
+        selectedCount += 1;
+    });
+
+    if (selectedCount === 0) {
+        const allOption = optionByValue.get('all');
+        if (allOption) allOption.selected = true;
+    }
+}
+
+function parseStudentQuickFilterValues(values) {
+    const normalizedValues = normalizeStudentQuickFilterValues(values);
+    const genders = [];
+    const campuses = [];
+    let below5 = false;
+
+    normalizedValues.forEach((value) => {
+        if (value.startsWith('gender:')) {
+            const gender = value.split(':')[1];
+            if (gender) genders.push(gender);
+            return;
+        }
+
+        if (value.startsWith('campus:')) {
+            const campus = value.slice('campus:'.length);
+            if (campus) campuses.push(campus);
+            return;
+        }
+
+        if (value === 'age:below5') {
+            below5 = true;
+        }
+    });
+
+    return {
+        genders,
+        campuses,
+        below5
+    };
+}
+
+function getStudentQuickFilterLabelForValue(value) {
+    const quickFilter = document.getElementById('studentQuickFilter');
+    if (!quickFilter) return '';
+    const option = Array.from(quickFilter.options || []).find((opt) => String(opt.value) === String(value));
+    return option ? String(option.textContent || '').trim() : '';
+}
+
+function buildStudentQuickFilterTriggerLabel(selectedValues) {
+    const normalized = normalizeStudentQuickFilterValues(selectedValues);
+    if (normalized.length === 0 || (normalized.length === 1 && normalized[0] === 'all')) return 'All Students';
+
+    const labels = normalized
+        .map((value) => getStudentQuickFilterLabelForValue(value))
+        .filter(Boolean);
+
+    if (!labels.length) return 'Filters';
+    if (labels.length <= 2) return labels.join(', ');
+    return `${labels.slice(0, 2).join(', ')} +${labels.length - 2}`;
+}
+
+function syncStudentQuickFilterMultiUI() {
+    const container = document.getElementById('studentQuickFilterMulti');
+    const trigger = document.getElementById('studentQuickFilterTrigger');
+    const menu = document.getElementById('studentQuickFilterMenu');
+    const quickFilter = document.getElementById('studentQuickFilter');
+    if (!container || !trigger || !menu || !quickFilter) return;
+
+    const selectedValues = getStudentQuickFilterSelectedValues(quickFilter);
+    trigger.textContent = buildStudentQuickFilterTriggerLabel(selectedValues);
+
+    const selectedSet = new Set(selectedValues);
+    menu.querySelectorAll('input[type="checkbox"][data-filter-value]').forEach((checkbox) => {
+        const value = checkbox.getAttribute('data-filter-value');
+        checkbox.checked = selectedSet.has(value);
+    });
+}
+
+function handleStudentQuickFilterCheckboxToggle(event) {
+    const checkbox = event?.target;
+    if (!checkbox || checkbox.tagName !== 'INPUT') return;
+    const quickFilter = document.getElementById('studentQuickFilter');
+    if (!quickFilter) return;
+
+    const value = String(checkbox.getAttribute('data-filter-value') || '').trim();
+    if (!value) return;
+
+    const optionByValue = new Map(Array.from(quickFilter.options || []).map((option) => [String(option.value), option]));
+    const allOption = optionByValue.get('all');
+
+    if (value === 'all' && checkbox.checked) {
+        Array.from(optionByValue.values()).forEach((option) => {
+            option.selected = option.value === 'all';
+        });
+        syncStudentQuickFilterMultiUI();
+        quickFilter.dispatchEvent(new Event('change'));
+        return;
+    }
+
+    const option = optionByValue.get(value);
+    if (option) option.selected = checkbox.checked;
+    if (checkbox.checked && allOption) allOption.selected = false;
+
+    const selectedValues = getStudentQuickFilterSelectedValues(quickFilter);
+    if (!selectedValues.length || (selectedValues.length === 1 && selectedValues[0] === 'all')) {
+        if (allOption) allOption.selected = true;
+    }
+
+    syncStudentQuickFilterMultiUI();
+    quickFilter.dispatchEvent(new Event('change'));
+}
+
+function buildStudentQuickFilterMultiMenu(forceRebuild = false) {
+    const container = document.getElementById('studentQuickFilterMulti');
+    const menu = document.getElementById('studentQuickFilterMenu');
+    const quickFilter = document.getElementById('studentQuickFilter');
+    if (!container || !menu || !quickFilter) return;
+
+    const signature = String(quickFilter.dataset.signature || '');
+    const shouldRebuild = forceRebuild || menu.dataset.signature !== signature || !menu.children.length;
+    if (!shouldRebuild) {
+        syncStudentQuickFilterMultiUI();
+        return;
+    }
+
+    const wasOpen = container.classList.contains('open');
+    menu.innerHTML = '';
+
+    const fragment = document.createDocumentFragment();
+    Array.from(quickFilter.children || []).forEach((child) => {
+        const tagName = String(child.tagName || '').toUpperCase();
+        if (tagName === 'OPTION') {
+            fragment.appendChild(createStudentQuickFilterMenuItem(child));
+            return;
+        }
+        if (tagName === 'OPTGROUP') {
+            const groupLabel = document.createElement('div');
+            groupLabel.className = 'student-multifilter-group';
+            groupLabel.textContent = child.label || '';
+            fragment.appendChild(groupLabel);
+            Array.from(child.children || []).forEach((option) => {
+                fragment.appendChild(createStudentQuickFilterMenuItem(option));
+            });
+        }
+    });
+
+    menu.appendChild(fragment);
+    menu.dataset.signature = signature;
+    syncStudentQuickFilterMultiUI();
+
+    if (wasOpen && !container.classList.contains('disabled')) {
+        openStudentQuickFilterMultiMenu();
+    } else {
+        closeStudentQuickFilterMultiMenu();
+    }
+
+    // Keep clicks inside the menu from closing it.
+    if (menu.dataset.bound !== '1') {
+        menu.dataset.bound = '1';
+        menu.addEventListener('click', (event) => event.stopPropagation());
+    }
+}
+
+function createStudentQuickFilterMenuItem(optionElement) {
+    const value = String(optionElement?.value || '').trim();
+    const labelText = String(optionElement?.textContent || '').trim();
+
+    const label = document.createElement('label');
+    label.className = 'student-multifilter-item';
+
+    const checkbox = document.createElement('input');
+    checkbox.type = 'checkbox';
+    checkbox.setAttribute('data-filter-value', value);
+    checkbox.checked = Boolean(optionElement?.selected);
+    checkbox.addEventListener('change', handleStudentQuickFilterCheckboxToggle);
+
+    const text = document.createElement('span');
+    text.textContent = labelText || value || '-';
+
+    label.appendChild(checkbox);
+    label.appendChild(text);
+    return label;
+}
+
 function renderStudents(term = '') {
     const tbody = document.getElementById('studentTableBody');
     if (!tbody) return;
@@ -2884,21 +3163,15 @@ function renderStudents(term = '') {
     }
 
     populateStudentQuickFilterOptions();
-    const quickValue = quickFilter ? String(quickFilter.value || 'all') : 'all';
-    let selectedGender = 'All';
-    let selectedAge = 'All';
-    let selectedCampus = 'All';
+    const selectedQuickValues = getStudentQuickFilterSelectedValues(quickFilter);
+    const parsedFilters = parseStudentQuickFilterValues(selectedQuickValues);
 
-    if (quickValue.startsWith('gender:')) {
-        selectedGender = quickValue.split(':')[1] || 'All';
-    } else if (quickValue.startsWith('campus:')) {
-        selectedCampus = quickValue.slice('campus:'.length) || 'All';
-    } else if (quickValue === 'age:below5') {
-        selectedAge = 'below5';
-    }
+    const genderSet = new Set(parsedFilters.genders.map((gender) => String(gender || '').toLowerCase()));
+    let campusSet = new Set(parsedFilters.campuses.map((campus) => String(campus || '').toLowerCase()));
+    const requireBelow5 = parsedFilters.below5;
 
-    if (loggedInUser?.role === 'Branch') {
-        selectedCampus = loggedInUser.campusName || selectedCampus;
+    if (loggedInUser?.role === 'Branch' && loggedInUser.campusName) {
+        campusSet = new Set([String(loggedInUser.campusName).toLowerCase()]);
     }
 
     const students = getData(STORAGE_KEY_STUDENTS);
@@ -2909,9 +3182,9 @@ function renderStudents(term = '') {
             (s.rollNo && s.rollNo.toString().toLowerCase().includes(term)) ||
             (s.studentCode && s.studentCode.toLowerCase().includes(term))
         ) &&
-        (selectedGender === 'All' || (s.gender || '').toLowerCase() === selectedGender.toLowerCase()) &&
-        (selectedAge === 'All' || (selectedAge === 'below5' && isStudentBelowAge(s, 5))) &&
-        (selectedCampus === 'All' || (s.campusName || 'Main Campus').toLowerCase() === selectedCampus.toLowerCase())
+        (genderSet.size === 0 || genderSet.has(String(s.gender || '').toLowerCase())) &&
+        (!requireBelow5 || isStudentBelowAge(s, 5)) &&
+        (campusSet.size === 0 || campusSet.has(String(s.campusName || 'Main Campus').toLowerCase()))
     );
 
     // Update total count display - Use filtered results length as requested
@@ -2961,49 +3234,79 @@ function renderStudents(term = '') {
 function populateStudentQuickFilterOptions() {
     const quickFilter = document.getElementById('studentQuickFilter');
     if (!quickFilter) return;
+    bindStudentQuickFilterMultiSelect();
 
-    const previousValue = quickFilter.value || 'all';
+    const previousSelected = getStudentQuickFilterSelectedValues(quickFilter);
+    const loggedInUser = getLoggedInUser();
+
     const students = getData(STORAGE_KEY_STUDENTS);
     const campusMap = new Map();
-    [...DEFAULT_CAMPUS_NAMES, ...studentQuickFilterBranchCampuses,
-        ...students.map((student) => String(student.campusName || 'Main Campus').trim())]
+    [...DEFAULT_CAMPUS_NAMES,
+        ...studentQuickFilterBranchCampuses,
+        ...students.map((student) => String(student.campusName || 'Main Campus').trim())
+    ]
         .forEach((campusName) => {
             const normalized = String(campusName || '').trim();
             if (!normalized) return;
             const key = normalized.toLowerCase();
             if (!campusMap.has(key)) campusMap.set(key, normalized);
         });
-    const campuses = Array.from(campusMap.values()).sort((a, b) => a.localeCompare(b));
 
-    quickFilter.innerHTML = `
-        <option value="all">All Students</option>
-        <option value="gender:Male">Male Students</option>
-        <option value="gender:Female">Female Students</option>
-        <option value="gender:Other">Other Gender</option>
-        <option value="age:below5">Below 5 Years</option>
-    `;
-
-    if (campuses.length) {
-        const campusGroup = document.createElement('optgroup');
-        campusGroup.label = 'Campus';
-        campuses.forEach((campusName) => {
-            const option = document.createElement('option');
-            option.value = `campus:${campusName}`;
-            option.textContent = campusName;
-            campusGroup.appendChild(option);
-        });
-        quickFilter.appendChild(campusGroup);
+    if (loggedInUser?.role === 'Branch' && loggedInUser.campusName) {
+        const normalizedBranchCampus = String(loggedInUser.campusName || '').trim();
+        if (normalizedBranchCampus) {
+            const key = normalizedBranchCampus.toLowerCase();
+            if (!campusMap.has(key)) campusMap.set(key, normalizedBranchCampus);
+        }
     }
 
-    const loggedInUser = getLoggedInUser();
+    const campuses = Array.from(campusMap.values()).sort((a, b) => a.localeCompare(b));
+    const signature = campuses.map((name) => String(name || '').toLowerCase()).join('|');
+    const needsRebuild = quickFilter.dataset.signature !== signature || !quickFilter.options.length;
+
+    if (needsRebuild) {
+        quickFilter.innerHTML = `
+            <option value="all">All Students</option>
+            <option value="gender:Male">Male Students</option>
+            <option value="gender:Female">Female Students</option>
+            <option value="gender:Other">Other Gender</option>
+            <option value="age:below5">Below 5 Years</option>
+        `;
+
+        if (campuses.length) {
+            const campusGroup = document.createElement('optgroup');
+            campusGroup.label = 'Campus';
+            campuses.forEach((campusName) => {
+                const option = document.createElement('option');
+                option.value = `campus:${campusName}`;
+                option.textContent = campusName;
+                campusGroup.appendChild(option);
+            });
+            quickFilter.appendChild(campusGroup);
+        }
+
+        quickFilter.dataset.signature = signature;
+    }
+
+    const container = document.getElementById('studentQuickFilterMulti');
+    const trigger = document.getElementById('studentQuickFilterTrigger');
+
     if (loggedInUser?.role === 'Branch' && loggedInUser.campusName) {
-        quickFilter.value = `campus:${loggedInUser.campusName}`;
+        const campusValue = `campus:${loggedInUser.campusName}`;
+        setStudentQuickFilterSelectedValues([campusValue]);
         quickFilter.disabled = true;
+        if (trigger) trigger.disabled = true;
+        if (container) container.classList.add('disabled');
+        buildStudentQuickFilterMultiMenu(needsRebuild);
         return;
     }
 
-    const hasPrevious = Array.from(quickFilter.options).some((option) => option.value === previousValue);
-    quickFilter.value = hasPrevious ? previousValue : 'all';
+    quickFilter.disabled = false;
+    if (trigger) trigger.disabled = false;
+    if (container) container.classList.remove('disabled');
+
+    setStudentQuickFilterSelectedValues(previousSelected);
+    buildStudentQuickFilterMultiMenu(needsRebuild);
 }
 
 async function loadStudentQuickFilterBranchCampuses() {

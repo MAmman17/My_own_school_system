@@ -476,6 +476,8 @@ document.addEventListener('DOMContentLoaded', () => {
         window.lucide.createIcons();
     }
 
+    showWelcomeAnimationIfNeeded();
+
     // === NOTIFICATION SYSTEM ===
     const bell = document.getElementById('notificationBell');
     const panel = document.getElementById('notificationPanel');
@@ -589,11 +591,12 @@ document.addEventListener('DOMContentLoaded', () => {
                     const loginTracking = JSON.parse(localStorage.getItem('EDUCORE_LOGIN_TRACKING')) || { count: 0, lastLogin: null };
                     loginTracking.count += 1;
                     loginTracking.lastLogin = new Date().toISOString();
-                    localStorage.setItem('EDUCORE_LOGIN_TRACKING', JSON.stringify(loginTracking));
-
-                    pushNotification('System Access', `${result.user.role} logged in: ${result.user.fullName}`, 'login');
-
-                    btn.innerText = 'Redirecting...';
+                     localStorage.setItem('EDUCORE_LOGIN_TRACKING', JSON.stringify(loginTracking));
+ 
+                     pushNotification('System Access', `${result.user.role} logged in: ${result.user.fullName}`, 'login');
+                    queueWelcomeAnimationForNextPage(result.user);
+ 
+                     btn.innerText = 'Redirecting...';
 
                     const getDefaultRoleHome = () => {
                         if (result.user.role === 'Admin') return 'dashboard.html';
@@ -1304,6 +1307,92 @@ function showSuccessModal(title, message) {
     } else {
         alert(message);
     }
+}
+
+const EDUCORE_WELCOME_SESSION_KEY = 'eduCore_welcome_payload';
+
+function queueWelcomeAnimationForNextPage(user) {
+    try {
+        const displayName = user?.fullName || user?.username || user?.role || 'User';
+        const role = user?.role || 'User';
+        sessionStorage.setItem(
+            EDUCORE_WELCOME_SESSION_KEY,
+            JSON.stringify({ displayName, role, at: Date.now() })
+        );
+    } catch (error) {
+        // Ignore
+    }
+}
+
+function showWelcomeAnimationIfNeeded() {
+    const loginForm = document.getElementById('loginForm');
+    if (loginForm) return;
+
+    const token = sessionStorage.getItem('eduCore_token');
+    if (!token) return;
+
+    let payload = null;
+    try {
+        payload = JSON.parse(sessionStorage.getItem(EDUCORE_WELCOME_SESSION_KEY) || 'null');
+    } catch (error) {
+        payload = null;
+    }
+
+    if (!payload || !payload.at) return;
+    if (Date.now() - Number(payload.at) > 5 * 60 * 1000) {
+        sessionStorage.removeItem(EDUCORE_WELCOME_SESSION_KEY);
+        return;
+    }
+
+    sessionStorage.removeItem(EDUCORE_WELCOME_SESSION_KEY);
+
+    const existing = document.getElementById('eduWelcomeOverlay');
+    if (existing) return;
+
+    const overlay = document.createElement('div');
+    overlay.id = 'eduWelcomeOverlay';
+    overlay.className = 'edu-welcome-overlay';
+    overlay.setAttribute('role', 'dialog');
+    overlay.setAttribute('aria-modal', 'true');
+
+    const safeName = String(payload.displayName || 'User').trim() || 'User';
+    const safeRole = String(payload.role || 'User').trim() || 'User';
+    const escape = typeof escapeSessionText === 'function' ? escapeSessionText : (value) => String(value ?? '');
+
+    overlay.innerHTML = `
+        <div class="edu-welcome-card">
+            <div class="edu-welcome-glow" aria-hidden="true"></div>
+            <div class="edu-welcome-icon"><i data-lucide="hand" width="28" height="28"></i></div>
+            <h2 class="edu-welcome-title">Welcome, ${escape(safeName)}!</h2>
+            <p class="edu-welcome-subtitle">${escape(safeRole)} dashboard is ready.</p>
+            <div class="edu-welcome-divider" aria-hidden="true"></div>
+            <button type="button" class="edu-welcome-skip">Get Started</button>
+        </div>
+    `;
+
+    document.body.appendChild(overlay);
+
+    const close = () => {
+        if (!overlay.classList.contains('active')) return;
+        overlay.classList.add('closing');
+        window.setTimeout(() => {
+            overlay.remove();
+        }, 240);
+    };
+
+    overlay.addEventListener('click', (event) => {
+        if (event.target === overlay) close();
+    });
+
+    const btn = overlay.querySelector('.edu-welcome-skip');
+    if (btn) btn.addEventListener('click', close);
+
+    overlay.classList.add('active');
+    if (window.lucide && typeof window.lucide.createIcons === 'function') {
+        window.lucide.createIcons();
+    }
+
+    window.setTimeout(close, 1800);
 }
 
 function closeSuccessModal() {

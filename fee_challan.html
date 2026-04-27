@@ -134,6 +134,85 @@
             box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
         }
 
+        .challan-filter-dropdown {
+            position: relative;
+        }
+
+        .challan-filter-trigger {
+            width: 100%;
+            min-height: 48px;
+            border: 1px solid #d8e0e8;
+            border-radius: 0.45rem;
+            background: #fff;
+            color: var(--challan-text);
+            padding: 0.85rem 0.9rem;
+            font: inherit;
+            cursor: pointer;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 0.75rem;
+        }
+
+        .challan-filter-trigger::after {
+            content: "▾";
+            color: var(--challan-soft);
+            transition: transform 0.15s ease;
+            flex-shrink: 0;
+        }
+
+        .challan-filter-dropdown.open .challan-filter-trigger::after {
+            transform: rotate(180deg);
+        }
+
+        .challan-filter-menu {
+            position: absolute;
+            top: calc(100% + 8px);
+            left: 0;
+            right: 0;
+            background: #fff;
+            border: 1px solid #dbe4ee;
+            border-radius: 0.75rem;
+            box-shadow: 0 20px 50px rgba(15, 23, 42, 0.18);
+            padding: 0.9rem;
+            display: none;
+            z-index: 100;
+        }
+
+        .challan-filter-dropdown.open .challan-filter-menu {
+            display: block;
+        }
+
+        .challan-filter-grid {
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 0.85rem;
+        }
+
+        .challan-filter-field label {
+            font-size: 0.74rem;
+            font-weight: 700;
+            color: var(--challan-text);
+            margin-bottom: 0.35rem;
+            display: block;
+        }
+
+        .challan-filter-field select {
+            width: 100%;
+            min-height: 44px;
+            border: 1px solid #d8e0e8;
+            border-radius: 0.5rem;
+            background: #fff;
+            padding: 0.75rem 0.85rem;
+            font: inherit;
+        }
+
+        @media (max-width: 900px) {
+            .challan-filter-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
         .preview-card {
             border: 1px dashed #d7e3ec;
             border-radius: 0.95rem;
@@ -364,13 +443,57 @@
             border-bottom: 1px solid #e2e8f0;
         }
 
+        .class-students-header-left {
+            display: grid;
+            gap: 0.15rem;
+            min-width: 0;
+        }
+
+        .class-students-subtitle {
+            font-size: 0.78rem;
+            color: #64748b;
+            line-height: 1.3;
+        }
+
+        .class-students-header-actions {
+            display: flex;
+            align-items: center;
+            gap: 0.4rem;
+        }
+
+        .class-students-selected-pill {
+            padding: 0.25rem 0.6rem;
+            border-radius: 999px;
+            background: #eff6ff;
+            color: #1d4ed8;
+            font-weight: 700;
+            font-size: 0.72rem;
+            white-space: nowrap;
+        }
+
+        .class-students-mini-btn {
+            border: 1px solid #dbe4ee;
+            background: #f8fafc;
+            border-radius: 0.5rem;
+            padding: 0.35rem 0.55rem;
+            cursor: pointer;
+            font-size: 0.78rem;
+            color: #334155;
+            white-space: nowrap;
+        }
+
+        .class-students-mini-btn:hover {
+            background: #eef2ff;
+            border-color: #c7d2fe;
+        }
+
         .class-students-header h3 {
             margin: 0;
             font-size: 1rem;
             color: var(--challan-text);
         }
 
-        .class-students-header button {
+        .class-students-header button.class-students-close {
             border: none;
             background: #f1f5f9;
             border-radius: 0.45rem;
@@ -409,14 +532,35 @@
             padding: 0.7rem 0.8rem;
             cursor: pointer;
             display: grid;
-            gap: 0.25rem;
+            grid-template-columns: 18px 1fr auto;
+            gap: 0.65rem;
             text-align: left;
             width: 100%;
+            align-items: start;
         }
 
         .class-student-item:hover {
             border-color: #93c5fd;
             background: #eff6ff;
+        }
+
+        .class-student-check {
+            width: 16px;
+            height: 16px;
+            margin-top: 2px;
+        }
+
+        .class-student-copy {
+            display: grid;
+            gap: 0.25rem;
+            min-width: 0;
+        }
+
+        .class-student-actions {
+            display: flex;
+            align-items: center;
+            gap: 0.4rem;
+            flex-shrink: 0;
         }
 
         .class-student-item strong {
@@ -427,6 +571,20 @@
         .class-student-item span {
             color: #475569;
             font-size: 0.8rem;
+        }
+
+        .class-student-view {
+            border: 1px solid #dbe4ee;
+            background: #fff;
+            border-radius: 0.55rem;
+            padding: 0.35rem 0.6rem;
+            cursor: pointer;
+            font-size: 0.78rem;
+            color: #0f172a;
+        }
+
+        .class-student-view:hover {
+            background: #f1f5f9;
         }
 
         .student-status-badge {
@@ -531,6 +689,81 @@
             display: flex;
             gap: 0.65rem;
             margin-top: 1rem;
+            flex-wrap: wrap;
+        }
+
+        .challan-actions-dropdown {
+            position: relative;
+            flex: 1 1 260px;
+            min-width: 220px;
+        }
+
+        .challan-actions-trigger {
+            width: 100%;
+            justify-content: center;
+        }
+
+        .challan-actions-menu {
+            position: absolute;
+            top: calc(100% + 10px);
+            right: 0;
+            min-width: 260px;
+            width: 100%;
+            background: #fff;
+            border: 1px solid #dbe4ee;
+            border-radius: 0.85rem;
+            box-shadow: 0 20px 50px rgba(15, 23, 42, 0.18);
+            padding: 0.4rem;
+            display: none;
+            z-index: 1400;
+        }
+
+        .challan-actions-dropdown.open .challan-actions-menu {
+            display: block;
+            animation: fadeIn 0.15s ease;
+        }
+
+        .challan-actions-item {
+            width: 100%;
+            border: none;
+            background: transparent;
+            border-radius: 0.75rem;
+            padding: 0.75rem 0.8rem;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 0.75rem;
+            font: inherit;
+            color: var(--challan-text);
+        }
+
+        .challan-actions-item:hover {
+            background: rgba(30, 58, 138, 0.06);
+        }
+
+        .challan-actions-item:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+
+        .challan-actions-left {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.6rem;
+            min-width: 0;
+        }
+
+        .challan-actions-left span {
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .challan-actions-meta {
+            font-size: 0.75rem;
+            color: var(--challan-soft);
+            white-space: nowrap;
         }
 
         .preview-print-sheet {
@@ -559,6 +792,13 @@
 
             .form-actions-row {
                 flex-direction: column;
+            }
+
+            .challan-actions-menu {
+                left: 0;
+                right: 0;
+                min-width: unset;
+                width: 100%;
             }
 
             .qr-preview-card {
@@ -738,20 +978,39 @@
                                     <input type="text" id="studentLookup" placeholder="STD-0001 or 20233">
                                     <div class="field-help">Enter a student ID or roll number to auto-fill the form.</div>
                                 </div>
-                                <div class="field-block">
-                                    <label for="challanClassFilter">Select Class</label>
-                                    <select id="challanClassFilter">
-                                        <option value="">All Classes</option>
-                                    </select>
-                                </div>
-                                <div class="field-block">
-                                    <label for="challanFeeStatusFilter">Fee Status</label>
-                                    <select id="challanFeeStatusFilter">
-                                        <option value="all" selected>All</option>
-                                        <option value="pending">Pending</option>
-                                        <option value="paid">Paid</option>
-                                    </select>
-                                    <div class="field-help">This filter affects the class student list and bulk print.</div>
+                                <div class="field-block full">
+                                    <label for="challanFilterTrigger">Filters</label>
+                                    <div class="challan-filter-dropdown" id="challanFilterDropdown">
+                                        <button type="button" class="challan-filter-trigger" id="challanFilterTrigger"
+                                            aria-haspopup="true" aria-expanded="false">
+                                            Campus: All, Class: All, Status: All
+                                        </button>
+                                        <div class="challan-filter-menu" id="challanFilterMenu">
+                                            <div class="challan-filter-grid">
+                                                <div class="challan-filter-field">
+                                                    <label for="challanCampusFilter">Campus</label>
+                                                    <select id="challanCampusFilter">
+                                                        <option value="">All Campuses</option>
+                                                    </select>
+                                                </div>
+                                                <div class="challan-filter-field">
+                                                    <label for="challanClassFilter">Class</label>
+                                                    <select id="challanClassFilter">
+                                                        <option value="">All Classes</option>
+                                                    </select>
+                                                </div>
+                                                <div class="challan-filter-field">
+                                                    <label for="challanFeeStatusFilter">Fee Status</label>
+                                                    <select id="challanFeeStatusFilter">
+                                                        <option value="all" selected>All</option>
+                                                        <option value="pending">Pending</option>
+                                                        <option value="paid">Paid</option>
+                                                    </select>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="field-help">Tip: Select a campus to print challans for all students in that campus (class optional). Use Fee Status for paid/unpaid.</div>
                                 </div>
                                 <div class="field-block">
                                     <label for="challanStudent">Student Name</label>
@@ -835,18 +1094,42 @@
                                 </div>
                             </form>
                             <div class="form-actions-row">
-                                <button class="btn btn-outline" type="button" onclick="resetChallanForm()">
-                                    <i data-lucide="refresh-cw" size="16"></i>&nbsp;Refresh Preview
-                                </button>
-                                <button class="btn btn-outline" type="button" id="printClassChallanBtn" onclick="printSelectedClassChallans()">
-                                    <i data-lucide="layers" size="16"></i>&nbsp;Print Class Challans
-                                </button>
-                                <button class="btn btn-outline" type="button" id="printPaidSlipsBtn" onclick="printSelectedClassChallans('paid')">
-                                    <i data-lucide="check-circle-2" size="16"></i>&nbsp;Print Paid Slips
-                                </button>
-                                <button class="btn btn-primary" type="button" id="printChallanBtn" onclick="window.print()">
-                                    <i data-lucide="printer" size="16"></i>&nbsp;Print Challan
-                                </button>
+                                <div class="challan-actions-dropdown" id="challanActionsDropdown">
+                                    <button class="btn btn-primary challan-actions-trigger" type="button" id="challanActionsTrigger"
+                                        aria-haspopup="true" aria-expanded="false">
+                                        <i data-lucide="wand-2" size="16"></i>&nbsp;Actions
+                                    </button>
+                                    <div class="challan-actions-menu" id="challanActionsMenu">
+                                        <button class="challan-actions-item" type="button" onclick="resetChallanForm(); closeChallanActionsDropdown();">
+                                            <span class="challan-actions-left">
+                                                <i data-lucide="refresh-cw" size="16"></i>
+                                                <span>Refresh Preview</span>
+                                            </span>
+                                            <span class="challan-actions-meta">Preview</span>
+                                        </button>
+                                        <button class="challan-actions-item" type="button" id="printChallanBtn" onclick="closeChallanActionsDropdown(); window.print();">
+                                            <span class="challan-actions-left">
+                                                <i data-lucide="printer" size="16"></i>
+                                                <span id="printChallanBtnLabel">Print Challan</span>
+                                            </span>
+                                            <span class="challan-actions-meta">Single</span>
+                                        </button>
+                                        <button class="challan-actions-item" type="button" id="printClassChallanBtn" onclick="closeChallanActionsDropdown(); printSelectedClassChallans();">
+                                            <span class="challan-actions-left">
+                                                <i data-lucide="layers" size="16"></i>
+                                                <span>Print Bulk Challans</span>
+                                            </span>
+                                            <span class="challan-actions-meta">Bulk</span>
+                                        </button>
+                                        <button class="challan-actions-item" type="button" id="printPaidSlipsBtn" onclick="closeChallanActionsDropdown(); printSelectedClassChallans('paid');">
+                                            <span class="challan-actions-left">
+                                                <i data-lucide="check-circle-2" size="16"></i>
+                                                <span>Print Bulk Paid Slips</span>
+                                            </span>
+                                            <span class="challan-actions-meta">Bulk</span>
+                                        </button>
+                                    </div>
+                                </div>
                             </div>
                             <div class="student-fee-snapshot" id="studentFeeSnapshot">
                                 Select a student or enter roll number to view pending fee details.
@@ -885,8 +1168,16 @@
     <div class="class-students-overlay" id="classStudentsOverlay">
         <div class="class-students-modal">
             <div class="class-students-header">
-                <h3 id="classStudentsModalTitle">Select Student</h3>
-                <button type="button" onclick="hideClassStudentsPopup()" aria-label="Close">x</button>
+                <div class="class-students-header-left">
+                    <h3 id="classStudentsModalTitle">Select Students</h3>
+                    <div class="class-students-subtitle" id="classStudentsModalSubtitle">Select students to print challans.</div>
+                </div>
+                <div class="class-students-header-actions">
+                    <span class="class-students-selected-pill" id="classStudentsSelectedCount">0 Selected</span>
+                    <button type="button" class="class-students-mini-btn" onclick="toggleSelectAllVisibleClassStudents()">Select All</button>
+                    <button type="button" class="class-students-mini-btn" onclick="clearSelectedClassStudents()">Clear</button>
+                    <button type="button" class="class-students-close" onclick="hideClassStudentsPopup()" aria-label="Close">x</button>
+                </div>
             </div>
             <div class="class-students-search">
                 <input type="text" id="classStudentsSearch" placeholder="Search by name, roll number, or student ID">
@@ -897,7 +1188,7 @@
                     Print Paid Slips
                 </button>
                 <button type="button" class="btn btn-primary" onclick="printSelectedClassChallans()">
-                    Print Class Challans
+                    Print Bulk Challans
                 </button>
                 <button type="button" class="btn btn-outline" onclick="hideClassStudentsPopup()">Cancel</button>
             </div>
@@ -938,6 +1229,9 @@
         let challanQrRequestId = 0;
         let challanPaymentSyncTimer = null;
         let classPopupStudents = [];
+        let classPopupSelectedStudentIds = new Set();
+        let classPopupLastVisibleStudentIds = [];
+        const CHALLAN_FALLBACK_CAMPUSES = ['Main Campus', 'Ali campus', 'Fatima Campus'];
         const CHALLAN_FALLBACK_CLASSES = [
             'Play Group', 'Nursery', 'Prep',
             'Class 1', 'Class 2', 'Class 3', 'Class 4', 'Class 5',
@@ -952,6 +1246,9 @@
 
         async function initializeChallanPage() {
             await loadChallanStudents();
+            bindChallanFilterDropdown();
+            bindChallanActionsDropdown();
+            populateCampusFilter();
             populateClassFilter();
             populateStudents();
             setChallanDefaults();
@@ -965,6 +1262,10 @@
             if (classFilter) {
                 classFilter.addEventListener('change', handleClassFilterChange);
             }
+            const campusFilter = document.getElementById('challanCampusFilter');
+            if (campusFilter) {
+                campusFilter.addEventListener('change', handleCampusFilterChange);
+            }
             const studentLookup = document.getElementById('studentLookup');
             if (studentLookup) {
                 studentLookup.addEventListener('input', handleStudentLookup);
@@ -976,7 +1277,10 @@
             }
             const statusFilter = document.getElementById('challanFeeStatusFilter');
             if (statusFilter) {
-                statusFilter.addEventListener('change', renderClassStudentsPopupList);
+                statusFilter.addEventListener('change', () => {
+                    updateChallanFilterTriggerLabel();
+                    renderClassStudentsPopupList();
+                });
             }
             const popupOverlay = document.getElementById('classStudentsOverlay');
             if (popupOverlay) {
@@ -1017,6 +1321,194 @@
             await mergeChallanFeePaymentsIntoMonthlyStore();
         }
 
+        function bindChallanFilterDropdown() {
+            const dropdown = document.getElementById('challanFilterDropdown');
+            const trigger = document.getElementById('challanFilterTrigger');
+            const menu = document.getElementById('challanFilterMenu');
+            if (!dropdown || !trigger || !menu) return;
+            if (dropdown.dataset.bound === '1') return;
+            dropdown.dataset.bound = '1';
+
+            trigger.addEventListener('click', (event) => {
+                event.stopPropagation();
+                toggleChallanFilterDropdown();
+            });
+
+            menu.addEventListener('click', (event) => event.stopPropagation());
+
+            document.addEventListener('click', (event) => {
+                if (!dropdown.classList.contains('open')) return;
+                if (dropdown.contains(event.target)) return;
+                closeChallanFilterDropdown();
+            }, true);
+
+            document.addEventListener('keydown', (event) => {
+                if (event.key !== 'Escape') return;
+                closeChallanFilterDropdown();
+            });
+        }
+
+        function bindChallanActionsDropdown() {
+            const dropdown = document.getElementById('challanActionsDropdown');
+            const trigger = document.getElementById('challanActionsTrigger');
+            const menu = document.getElementById('challanActionsMenu');
+            if (!dropdown || !trigger || !menu) return;
+            if (dropdown.dataset.bound === '1') return;
+            dropdown.dataset.bound = '1';
+
+            trigger.addEventListener('click', (event) => {
+                event.stopPropagation();
+                toggleChallanActionsDropdown();
+            });
+
+            menu.addEventListener('click', (event) => event.stopPropagation());
+
+            document.addEventListener('click', (event) => {
+                if (!dropdown.classList.contains('open')) return;
+                if (dropdown.contains(event.target)) return;
+                closeChallanActionsDropdown();
+            }, true);
+
+            document.addEventListener('keydown', (event) => {
+                if (event.key !== 'Escape') return;
+                closeChallanActionsDropdown();
+            });
+        }
+
+        function openChallanActionsDropdown() {
+            const dropdown = document.getElementById('challanActionsDropdown');
+            const trigger = document.getElementById('challanActionsTrigger');
+            if (!dropdown || !trigger) return;
+            dropdown.classList.add('open');
+            trigger.setAttribute('aria-expanded', 'true');
+        }
+
+        function closeChallanActionsDropdown() {
+            const dropdown = document.getElementById('challanActionsDropdown');
+            const trigger = document.getElementById('challanActionsTrigger');
+            if (!dropdown || !trigger) return;
+            dropdown.classList.remove('open');
+            trigger.setAttribute('aria-expanded', 'false');
+        }
+
+        function toggleChallanActionsDropdown() {
+            const dropdown = document.getElementById('challanActionsDropdown');
+            if (!dropdown) return;
+            if (dropdown.classList.contains('open')) {
+                closeChallanActionsDropdown();
+                return;
+            }
+            openChallanActionsDropdown();
+        }
+
+        function openChallanFilterDropdown() {
+            const dropdown = document.getElementById('challanFilterDropdown');
+            const trigger = document.getElementById('challanFilterTrigger');
+            if (!dropdown || !trigger) return;
+            dropdown.classList.add('open');
+            trigger.setAttribute('aria-expanded', 'true');
+        }
+
+        function closeChallanFilterDropdown() {
+            const dropdown = document.getElementById('challanFilterDropdown');
+            const trigger = document.getElementById('challanFilterTrigger');
+            if (!dropdown || !trigger) return;
+            dropdown.classList.remove('open');
+            trigger.setAttribute('aria-expanded', 'false');
+        }
+
+        function toggleChallanFilterDropdown() {
+            const dropdown = document.getElementById('challanFilterDropdown');
+            if (!dropdown) return;
+            if (dropdown.classList.contains('open')) {
+                closeChallanFilterDropdown();
+                return;
+            }
+            openChallanFilterDropdown();
+        }
+
+        function getSelectedChallanCampus() {
+            return String(document.getElementById('challanCampusFilter')?.value || '').trim();
+        }
+
+        function normalizeCampusKey(value) {
+            return String(value || '').trim().toLowerCase();
+        }
+
+        function getAvailableChallanCampuses() {
+            const campusMap = new Map();
+            [...CHALLAN_FALLBACK_CAMPUSES, ...challanStudents.map((student) => String(student?.campusName || '').trim())]
+                .forEach((campusName) => {
+                    const normalized = String(campusName || '').trim();
+                    if (!normalized) return;
+                    const key = normalizeCampusKey(normalized);
+                    if (!campusMap.has(key)) campusMap.set(key, normalized);
+                });
+            return Array.from(campusMap.values()).sort((a, b) => a.localeCompare(b));
+        }
+
+        function populateCampusFilter() {
+            const select = document.getElementById('challanCampusFilter');
+            if (!select) return;
+
+            const previousValue = select.value || '';
+            const campuses = getAvailableChallanCampuses();
+
+            select.innerHTML = '<option value="">All Campuses</option>';
+            campuses.forEach((campusName) => {
+                const option = document.createElement('option');
+                option.value = campusName;
+                option.textContent = campusName;
+                select.appendChild(option);
+            });
+
+            const user = typeof getLoggedInUser === 'function' ? getLoggedInUser() : null;
+            if (user?.role === 'Branch' && user.campusName) {
+                select.value = campuses.includes(user.campusName) ? user.campusName : user.campusName;
+                select.disabled = true;
+                applyBranchDetailsToChallan(user.campusName);
+            } else {
+                select.disabled = false;
+                select.value = campuses.includes(previousValue) ? previousValue : '';
+            }
+
+            updateChallanFilterTriggerLabel();
+        }
+
+        function updateChallanFilterTriggerLabel() {
+            const trigger = document.getElementById('challanFilterTrigger');
+            if (!trigger) return;
+            const campus = getSelectedChallanCampus() || 'All';
+            const classLabel = String(document.getElementById('challanClassFilter')?.value || '').trim() || 'All';
+            const statusLabel = String(document.getElementById('challanFeeStatusFilter')?.value || 'all').toLowerCase();
+            const statusPretty = statusLabel === 'pending' ? 'Pending' : (statusLabel === 'paid' ? 'Paid' : 'All');
+            trigger.textContent = `Campus: ${campus}, Class: ${classLabel}, Status: ${statusPretty}`;
+        }
+
+        function handleCampusFilterChange() {
+            const campus = getSelectedChallanCampus();
+            if (campus) {
+                applyBranchDetailsToChallan(campus);
+            }
+
+            const classFilter = document.getElementById('challanClassFilter');
+            const previousClass = String(classFilter?.value || '').trim();
+
+            populateClassFilter(previousClass);
+            populateStudents();
+            updateChallanFilterTriggerLabel();
+
+            const filteredStudents = getFilteredChallanStudentsBySelectedClass();
+            const activeClass = String(document.getElementById('challanClassFilter')?.value || '').trim();
+            if (activeClass && filteredStudents.length) {
+                showClassStudentsPopup(activeClass, filteredStudents);
+            } else {
+                hideClassStudentsPopup();
+            }
+
+            triggerChallanRefresh();
+        }
+
         function normalizeClassLabel(value) {
             return String(value || '').trim();
         }
@@ -1055,9 +1547,10 @@
             return true;
         }
 
-        function getAvailableChallanClasses() {
+        function getAvailableChallanClasses(campusName = '') {
             const storedClasses = getData(STORAGE_KEY_CLASSES);
             const sourceClasses = [...CHALLAN_FALLBACK_CLASSES];
+            const campusKey = normalizeCampusKey(campusName);
 
             if (Array.isArray(storedClasses) && storedClasses.length) {
                 storedClasses.forEach((item) => {
@@ -1066,6 +1559,10 @@
                 });
             }
             challanStudents.forEach((student) => {
+                if (campusKey) {
+                    const studentCampusKey = normalizeCampusKey(student?.campusName || '');
+                    if (!studentCampusKey || studentCampusKey !== campusKey) return;
+                }
                 const className = normalizeClassLabel(student?.classGrade || '');
                 if (isLikelyClassLabel(className)) sourceClasses.push(className);
             });
@@ -1086,7 +1583,7 @@
             if (!classFilter) return;
 
             const currentSelection = selectedClass || classFilter.value || '';
-            const classList = getAvailableChallanClasses();
+            const classList = getAvailableChallanClasses(getSelectedChallanCampus());
 
             classFilter.innerHTML = '<option value="">All Classes</option>';
             classList.forEach((className) => {
@@ -1097,6 +1594,7 @@
             });
 
             classFilter.value = classList.includes(currentSelection) ? currentSelection : '';
+            updateChallanFilterTriggerLabel();
         }
 
         function getChallanLongMonthName(value) {
@@ -1160,12 +1658,19 @@
         }
 
         function getFilteredChallanStudentsBySelectedClass() {
+            const selectedCampus = getSelectedChallanCampus();
+            const selectedCampusKey = normalizeCampusKey(selectedCampus);
             const classFilter = document.getElementById('challanClassFilter');
             const selectedClass = normalizeClassLabel(classFilter ? classFilter.value : '');
             const selectedClassKey = getClassKey(selectedClass);
-            return selectedClass
-                ? challanStudents.filter((student) => getClassKey(student.classGrade) === selectedClassKey)
-                : challanStudents;
+            return challanStudents.filter((student) => {
+                if (selectedCampusKey) {
+                    const campusKey = normalizeCampusKey(student?.campusName || '');
+                    if (!campusKey || campusKey !== selectedCampusKey) return false;
+                }
+                if (!selectedClassKey) return true;
+                return getClassKey(student.classGrade) === selectedClassKey;
+            });
         }
 
         function handleClassFilterChange() {
@@ -1176,6 +1681,7 @@
             const optionExists = Array.from(studentSelect.options).some((option) => option.value === selectedStudentId);
             const classFilter = document.getElementById('challanClassFilter');
             const selectedClass = normalizeClassLabel(classFilter ? classFilter.value : '');
+            updateChallanFilterTriggerLabel();
 
             if (selectedStudentId && optionExists) {
                 studentSelect.value = selectedStudentId;
@@ -1204,11 +1710,20 @@
         function showClassStudentsPopup(className, students) {
             const overlay = document.getElementById('classStudentsOverlay');
             const title = document.getElementById('classStudentsModalTitle');
+            const subtitle = document.getElementById('classStudentsModalSubtitle');
             const searchInput = document.getElementById('classStudentsSearch');
             if (!overlay || !title) return;
 
             classPopupStudents = Array.isArray(students) ? [...students] : [];
+            classPopupSelectedStudentIds = new Set();
             title.textContent = `${className} Students`;
+            if (subtitle) {
+                const campusLabel = getSelectedChallanCampus() || 'All campuses';
+                const classLabel = String(document.getElementById('challanClassFilter')?.value || '').trim() || 'All classes';
+                const statusLabel = String(document.getElementById('challanFeeStatusFilter')?.value || 'all').toLowerCase();
+                const statusPretty = statusLabel === 'pending' ? 'Unpaid' : (statusLabel === 'paid' ? 'Paid' : 'All');
+                subtitle.textContent = `Campus: ${campusLabel} • Class: ${classLabel} • Status: ${statusPretty}`;
+            }
             if (searchInput) searchInput.value = '';
             renderClassStudentsPopupList();
             overlay.classList.add('active');
@@ -1218,6 +1733,55 @@
             const overlay = document.getElementById('classStudentsOverlay');
             if (!overlay) return;
             overlay.classList.remove('active');
+        }
+
+        function updateClassPopupSelectedCountUI() {
+            const countEl = document.getElementById('classStudentsSelectedCount');
+            if (!countEl) return;
+            const count = classPopupSelectedStudentIds.size;
+            countEl.textContent = `${count} Selected`;
+
+            const toggleBtn = document.querySelector('.class-students-header-actions .class-students-mini-btn');
+            if (!toggleBtn) return;
+            const visibleSet = new Set(classPopupLastVisibleStudentIds);
+            const allVisibleSelected = classPopupLastVisibleStudentIds.length > 0 &&
+                classPopupLastVisibleStudentIds.every((id) => classPopupSelectedStudentIds.has(id));
+            toggleBtn.textContent = allVisibleSelected ? 'Deselect All' : 'Select All';
+        }
+
+        function clearSelectedClassStudents() {
+            classPopupSelectedStudentIds = new Set();
+            renderClassStudentsPopupList();
+        }
+
+        function toggleSelectAllVisibleClassStudents() {
+            if (!classPopupLastVisibleStudentIds.length) return;
+
+            const allVisibleSelected = classPopupLastVisibleStudentIds.every((id) => classPopupSelectedStudentIds.has(id));
+            const next = new Set(classPopupSelectedStudentIds);
+
+            if (allVisibleSelected) {
+                classPopupLastVisibleStudentIds.forEach((id) => next.delete(id));
+            } else {
+                classPopupLastVisibleStudentIds.forEach((id) => next.add(id));
+            }
+
+            classPopupSelectedStudentIds = next;
+            renderClassStudentsPopupList();
+        }
+
+        function toggleClassPopupStudentSelection(studentId, checked) {
+            const safeId = String(studentId || '').trim();
+            if (!safeId) return;
+
+            const next = new Set(classPopupSelectedStudentIds);
+            if (checked) {
+                next.add(safeId);
+            } else {
+                next.delete(safeId);
+            }
+            classPopupSelectedStudentIds = next;
+            updateClassPopupSelectedCountUI();
         }
 
         function getEffectiveChallanFeeMonthLabel() {
@@ -1248,25 +1812,38 @@
                 if (statusFilter === 'pending') return !paidForMonth;
                 return true;
             });
+            classPopupLastVisibleStudentIds = visibleStudents.map((student) => String(student.id || '').trim()).filter(Boolean);
 
             if (!visibleStudents.length) {
                 list.innerHTML = '<div class="class-students-empty">No students found for this class.</div>';
+                updateClassPopupSelectedCountUI();
                 return;
             }
 
             list.innerHTML = visibleStudents.map((student) => {
                 const paidForMonth = isStudentPaidForMonth(student, feeMonthLabel);
+                const idPayload = encodeURIComponent(String(student.id || ''));
+                const checked = classPopupSelectedStudentIds.has(String(student.id || ''));
                 return `
-                <button type="button" class="class-student-item" onclick="selectStudentFromClassPopup(decodeURIComponent('${encodeURIComponent(student.id)}'))">
-                    <strong>${escapeHtml(student.fullName || 'Unnamed Student')}</strong>
-                    <span>Roll: ${escapeHtml(student.rollNo || '-')} | ID: ${escapeHtml(student.studentCode || student.id || '-')}</span>
-                    <span class="student-status-badge ${paidForMonth ? 'paid' : 'pending'}">${paidForMonth ? 'Paid' : 'Pending'}</span>
-                </button>
+                <div class="class-student-item">
+                    <input class="class-student-check" type="checkbox" ${checked ? 'checked' : ''}
+                        onchange="toggleClassPopupStudentSelection(decodeURIComponent('${idPayload}'), this.checked)">
+                    <div class="class-student-copy">
+                        <strong>${escapeHtml(student.fullName || 'Unnamed Student')}</strong>
+                        <span>Roll: ${escapeHtml(student.rollNo || '-')} | ID: ${escapeHtml(student.studentCode || student.id || '-')}</span>
+                        <span class="student-status-badge ${paidForMonth ? 'paid' : 'pending'}">${paidForMonth ? 'Paid' : 'Pending'}</span>
+                    </div>
+                    <div class="class-student-actions">
+                        <button type="button" class="class-student-view" onclick="viewStudentFromClassPopup(decodeURIComponent('${idPayload}'))">View</button>
+                    </div>
+                </div>
             `;
             }).join('');
+
+            updateClassPopupSelectedCountUI();
         }
 
-        function selectStudentFromClassPopup(studentId) {
+        function viewStudentFromClassPopup(studentId) {
             const student = challanStudents.find((item) => item.id === studentId);
             if (!student) return;
 
@@ -1274,7 +1851,6 @@
             const studentSelect = document.getElementById('challanStudent');
             if (studentSelect) studentSelect.value = student.id;
             applyStudentToChallan(student, true);
-            hideClassStudentsPopup();
             triggerChallanRefresh();
         }
 
@@ -1355,7 +1931,8 @@
             document.getElementById('studentAdmNo').value = generatedStudentId;
             document.getElementById('fatherName').value = student.fatherName || '';
             document.getElementById('fatherMobile').value = student.parentPhone || student.phone || student.fatherMobile || '';
-            applyBranchDetailsToChallan(student.campusName);
+            const selectedCampus = getSelectedChallanCampus();
+            applyBranchDetailsToChallan(selectedCampus || student.campusName);
             document.getElementById('feeMonth').value = isPaid ? 'Paid' : (feeSummary.pendingMonths.join(', ') || CHALLAN_MONTHS[new Date().getMonth()]);
             document.getElementById('baseAmount').value = isPaid ? 0 : feeSummary.pendingAmount;
             document.getElementById('additionalCharges').value = isPaid ? 0 : Number(document.getElementById('additionalCharges').value || 0);
@@ -1389,13 +1966,10 @@
             const paidState = !!isPaid || monthPaid;
 
             printBtn.disabled = false;
-            printBtn.style.opacity = '1';
-            printBtn.style.cursor = 'pointer';
-            printBtn.innerHTML = paidState
-                ? '<i data-lucide="printer" size="16"></i>&nbsp;Print Paid Slip'
-                : '<i data-lucide="printer" size="16"></i>&nbsp;Print Challan';
-
-            if (window.lucide && window.lucide.createIcons) window.lucide.createIcons();
+            const label = document.getElementById('printChallanBtnLabel');
+            if (label) {
+                label.textContent = paidState ? 'Print Paid Slip' : 'Print Challan';
+            }
         }
 
         function getChallanStudentFeeSummary(student) {
@@ -1783,20 +2357,56 @@
         }
 
         async function printSelectedClassChallans(statusOverride = '') {
+            const selectedCampus = getSelectedChallanCampus();
             const classFilter = document.getElementById('challanClassFilter');
             const selectedClass = normalizeClassLabel(classFilter ? classFilter.value : '');
             const statusFilter = String(statusOverride || document.getElementById('challanFeeStatusFilter')?.value || 'pending').toLowerCase();
 
-            if (!selectedClass) {
-                alert('Please select a class to print challans.');
+            const classStudents = getFilteredChallanStudentsBySelectedClass();
+            if (!classStudents.length) {
+                alert('No students found for the selected filters.');
                 return;
             }
 
-            const classStudents = getFilteredChallanStudentsBySelectedClass();
-            if (!classStudents.length) {
-                alert('No students found for the selected class.');
+            const classStudentIdSet = new Set(classStudents.map((student) => student?.id).filter(Boolean));
+            let selectedIds = Array.from(classPopupSelectedStudentIds || []).filter((id) => classStudentIdSet.has(id));
+            if (!selectedIds.length) {
+                const isAllCampuses = !selectedCampus;
+                const isAllClasses = !selectedClass;
+                const printingEverything = isAllCampuses && isAllClasses;
+
+                if (printingEverything) {
+                    const statusPretty = statusFilter === 'pending' ? 'Unpaid' : (statusFilter === 'paid' ? 'Paid' : 'All');
+                    const confirmText = `You are about to print challans for ALL campuses and ALL classes.\n\nStudents found: ${classStudents.length}\nStatus: ${statusPretty}\n\nThis may take time and could slow down the browser. Continue?`;
+
+                    let ok = false;
+                    try {
+                        ok = typeof showAppConfirm === 'function' ? await showAppConfirm(confirmText) : window.confirm(confirmText);
+                    } catch (error) {
+                        ok = window.confirm(confirmText);
+                    }
+
+                    if (!ok) return;
+                    selectedIds = Array.from(classStudentIdSet);
+                } else {
+                const statusEl = document.getElementById('challanFeeStatusFilter');
+                if (statusEl && (statusOverride === 'paid' || statusOverride === 'pending' || statusOverride === 'all')) {
+                    statusEl.value = statusOverride;
+                    updateChallanFilterTriggerLabel();
+                }
+                const popupLabel = selectedClass ? selectedClass : selectedCampus;
+                showClassStudentsPopup(popupLabel || 'Students', classStudents);
+                // Preselect all visible students to make bulk printing faster.
+                setTimeout(() => {
+                    if (typeof toggleSelectAllVisibleClassStudents === 'function') {
+                        toggleSelectAllVisibleClassStudents();
+                    }
+                }, 0);
+                alert('Review the selected students, then print.');
                 return;
+                }
             }
+            const targetStudents = classStudents.filter((student) => selectedIds.includes(student?.id));
 
             const feeMonthInput = document.getElementById('feeMonth').value.trim();
             const safeFeeMonthInput = feeMonthInput && feeMonthInput.toLowerCase() !== 'paid' ? feeMonthInput : '';
@@ -1827,13 +2437,14 @@
             const particulars = document.getElementById('particulars').value.trim() || 'Tuition Fee';
             const schoolName = document.getElementById('schoolName').value.trim() || 'My own Science school';
             const schoolAddress = document.getElementById('schoolAddress').value.trim() || `${CHALLAN_BRANCH_CONTACTS.main.campusLabel} - ${CHALLAN_BRANCH_CONTACTS.main.addressLine}`;
+            const useFormAddressForBulk = !!selectedCampus;
             const urduNote = document.getElementById('urduNote').value.trim() || '';
             const notes = document.getElementById('challanNotes').value.trim() || 'No additional instructions.';
 
             const items = [];
             const challans = [];
 
-            for (const student of classStudents) {
+            for (const student of targetStudents) {
                 const paidForMonth = isStudentPaidForMonth(student, feeMonthLabel);
                 if (statusFilter === 'pending' && paidForMonth) continue;
                 if (statusFilter === 'paid' && !paidForMonth) continue;
@@ -1844,6 +2455,9 @@
 
                 const challanNumber = generateBulkChallanNumber(student, feeMonthLabel);
                 const generatedStudentId = student?.studentCode || student?.id || student?.rollNo || '';
+                const branchDetails = getChallanBranchContactDetails(student?.campusName);
+                const defaultCampusAddress = `${branchDetails.campusLabel} - ${branchDetails.addressLine}`;
+                const campusAwareAddress = useFormAddressForBulk ? schoolAddress : defaultCampusAddress;
 
                 const data = {
                     studentId: student?.id || '',
@@ -1865,7 +2479,7 @@
                     discountAmount,
                     particulars,
                     schoolName,
-                    schoolAddress,
+                    schoolAddress: campusAwareAddress,
                     urduNote,
                     notes,
                     totalDue

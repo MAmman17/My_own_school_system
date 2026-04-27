@@ -747,11 +747,11 @@
                                 <div class="field-block">
                                     <label for="challanFeeStatusFilter">Fee Status</label>
                                     <select id="challanFeeStatusFilter">
+                                        <option value="all" selected>All</option>
                                         <option value="pending">Pending</option>
                                         <option value="paid">Paid</option>
-                                        <option value="all">All</option>
                                     </select>
-                                    <div class="field-help">Bulk print uses class + fee month + due date from this form.</div>
+                                    <div class="field-help">This filter affects the class student list and bulk print.</div>
                                 </div>
                                 <div class="field-block">
                                     <label for="challanStudent">Student Name</label>
@@ -841,6 +841,9 @@
                                 <button class="btn btn-outline" type="button" id="printClassChallanBtn" onclick="printSelectedClassChallans()">
                                     <i data-lucide="layers" size="16"></i>&nbsp;Print Class Challans
                                 </button>
+                                <button class="btn btn-outline" type="button" id="printPaidSlipsBtn" onclick="printSelectedClassChallans('paid')">
+                                    <i data-lucide="check-circle-2" size="16"></i>&nbsp;Print Paid Slips
+                                </button>
                                 <button class="btn btn-primary" type="button" id="printChallanBtn" onclick="window.print()">
                                     <i data-lucide="printer" size="16"></i>&nbsp;Print Challan
                                 </button>
@@ -890,6 +893,9 @@
             </div>
             <div class="class-students-list" id="classStudentsList"></div>
             <div class="class-students-footer">
+                <button type="button" class="btn btn-outline" onclick="printSelectedClassChallans('paid')">
+                    Print Paid Slips
+                </button>
                 <button type="button" class="btn btn-primary" onclick="printSelectedClassChallans()">
                     Print Class Challans
                 </button>
@@ -967,6 +973,10 @@
             const popupSearch = document.getElementById('classStudentsSearch');
             if (popupSearch) {
                 popupSearch.addEventListener('input', renderClassStudentsPopupList);
+            }
+            const statusFilter = document.getElementById('challanFeeStatusFilter');
+            if (statusFilter) {
+                statusFilter.addEventListener('change', renderClassStudentsPopupList);
             }
             const popupOverlay = document.getElementById('classStudentsOverlay');
             if (popupOverlay) {
@@ -1210,18 +1220,33 @@
             overlay.classList.remove('active');
         }
 
+        function getEffectiveChallanFeeMonthLabel() {
+            const feeMonthInput = String(document.getElementById('feeMonth')?.value || '').trim();
+            const safeFeeMonthInput = feeMonthInput && feeMonthInput.toLowerCase() !== 'paid' ? feeMonthInput : '';
+            return safeFeeMonthInput
+                || String(document.getElementById('challanMonth')?.value || '').trim()
+                || new Date().toLocaleDateString('en-GB', { month: 'short', year: 'numeric' }).replace(' ', ', ');
+        }
+
         function renderClassStudentsPopupList() {
             const list = document.getElementById('classStudentsList');
             const searchInput = document.getElementById('classStudentsSearch');
             if (!list) return;
 
             const term = String(searchInput?.value || '').trim().toLowerCase();
+            const statusFilter = String(document.getElementById('challanFeeStatusFilter')?.value || 'pending').toLowerCase();
+            const feeMonthLabel = getEffectiveChallanFeeMonthLabel();
             const visibleStudents = classPopupStudents.filter((student) => {
-                if (!term) return true;
-                return String(student.fullName || '').toLowerCase().includes(term) ||
+                const matchesTerm = !term || String(student.fullName || '').toLowerCase().includes(term) ||
                     String(student.rollNo || '').toLowerCase().includes(term) ||
                     String(student.studentCode || '').toLowerCase().includes(term) ||
                     String(student.id || '').toLowerCase().includes(term);
+                if (!matchesTerm) return false;
+                if (statusFilter === 'all') return true;
+                const paidForMonth = isStudentPaidForMonth(student, feeMonthLabel);
+                if (statusFilter === 'paid') return paidForMonth;
+                if (statusFilter === 'pending') return !paidForMonth;
+                return true;
             });
 
             if (!visibleStudents.length) {
@@ -1229,13 +1254,16 @@
                 return;
             }
 
-            list.innerHTML = visibleStudents.map((student) => `
+            list.innerHTML = visibleStudents.map((student) => {
+                const paidForMonth = isStudentPaidForMonth(student, feeMonthLabel);
+                return `
                 <button type="button" class="class-student-item" onclick="selectStudentFromClassPopup(decodeURIComponent('${encodeURIComponent(student.id)}'))">
                     <strong>${escapeHtml(student.fullName || 'Unnamed Student')}</strong>
                     <span>Roll: ${escapeHtml(student.rollNo || '-')} | ID: ${escapeHtml(student.studentCode || student.id || '-')}</span>
-                    <span class="student-status-badge ${isStudentFeePaid(student) ? 'paid' : 'pending'}">${isStudentFeePaid(student) ? 'Paid' : 'Pending'}</span>
+                    <span class="student-status-badge ${paidForMonth ? 'paid' : 'pending'}">${paidForMonth ? 'Paid' : 'Pending'}</span>
                 </button>
-            `).join('');
+            `;
+            }).join('');
         }
 
         function selectStudentFromClassPopup(studentId) {
@@ -1353,11 +1381,18 @@
             const printBtn = document.getElementById('printChallanBtn');
             if (!printBtn) return;
 
-            printBtn.disabled = !!isPaid;
-            printBtn.style.opacity = isPaid ? '0.6' : '1';
-            printBtn.style.cursor = isPaid ? 'not-allowed' : 'pointer';
-            printBtn.innerHTML = isPaid
-                ? '<i data-lucide="check-circle-2" size="16"></i>&nbsp;Paid - Challan Not Required'
+            const selectedStudent = getSelectedChallanStudent();
+            const feeMonthLabel = String(document.getElementById('feeMonth')?.value || '').trim();
+            const monthPaid = selectedStudent && feeMonthLabel && feeMonthLabel.toLowerCase() !== 'paid'
+                ? isStudentPaidForMonth(selectedStudent, feeMonthLabel)
+                : false;
+            const paidState = !!isPaid || monthPaid;
+
+            printBtn.disabled = false;
+            printBtn.style.opacity = '1';
+            printBtn.style.cursor = 'pointer';
+            printBtn.innerHTML = paidState
+                ? '<i data-lucide="printer" size="16"></i>&nbsp;Print Paid Slip'
                 : '<i data-lucide="printer" size="16"></i>&nbsp;Print Challan';
 
             if (window.lucide && window.lucide.createIcons) window.lucide.createIcons();
@@ -1449,7 +1484,15 @@
             triggerChallanRefresh();
         }
 
-        function handleChallanFieldUpdate() {
+        function handleChallanFieldUpdate(event) {
+            const overlay = document.getElementById('classStudentsOverlay');
+            const overlayActive = overlay?.classList?.contains('active');
+            const changedId = String(event?.target?.id || '');
+            if (changedId === 'feeMonth' || changedId === 'challanMonth') {
+                const selectedStudent = getSelectedChallanStudent();
+                if (selectedStudent) updateChallanPaidStateUI(isStudentFeePaid(selectedStudent));
+                if (overlayActive) renderClassStudentsPopupList();
+            }
             triggerChallanRefresh();
         }
 
@@ -1601,6 +1644,8 @@
         function getChallanQrBlockReason(data) {
             const selectedStudent = getSelectedChallanStudent();
             if (!selectedStudent || !data.studentId) return 'Select a student to generate the QR code.';
+            const feeMonthLabel = String(data?.feeMonth || '').trim();
+            if (feeMonthLabel && feeMonthLabel.toLowerCase() !== 'paid' && isStudentPaidForMonth(selectedStudent, feeMonthLabel)) return 'Paid';
             if (isStudentFeePaid(selectedStudent)) return 'Paid';
             if (!data.feeMonth || data.feeMonth === '-') return 'Fee month is required.';
             if (!data.challanNumber || data.challanNumber === '-') return 'Challan number is required.';
@@ -1737,10 +1782,10 @@
             return studentMonthly[monthKey] === 'Paid';
         }
 
-        async function printSelectedClassChallans() {
+        async function printSelectedClassChallans(statusOverride = '') {
             const classFilter = document.getElementById('challanClassFilter');
             const selectedClass = normalizeClassLabel(classFilter ? classFilter.value : '');
-            const statusFilter = String(document.getElementById('challanFeeStatusFilter')?.value || 'pending').toLowerCase();
+            const statusFilter = String(statusOverride || document.getElementById('challanFeeStatusFilter')?.value || 'pending').toLowerCase();
 
             if (!selectedClass) {
                 alert('Please select a class to print challans.');

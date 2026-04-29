@@ -2211,6 +2211,36 @@
             renderChallanPreview();
         }
 
+        async function requestChallanToken(payload) {
+            const response = await fetch(`${API_BASE_URL}/fees/challan-token`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    studentId: payload.studentId,
+                    studentName: payload.studentName,
+                    rollNo: payload.rollNo,
+                    classGrade: payload.classSection || payload.classGrade,
+                    feeMonth: payload.feeMonth,
+                    session: payload.session,
+                    amount: payload.totalDue ?? payload.amount,
+                    challanNumber: payload.challanNumber
+                })
+            });
+
+            const result = await response.json().catch(() => ({}));
+            if (!response.ok || !result?.success || !result?.paymentUrl || !result?.qrDataUrl) {
+                const message = result?.message || 'QR code could not be generated.';
+                const error = new Error(message);
+                error.statusCode = response.status;
+                throw error;
+            }
+
+            return {
+                paymentUrl: result.paymentUrl,
+                qrDataUrl: result.qrDataUrl
+            };
+        }
+
         function buildOfflineQrText(data) {
             const parts = [
                 `CHALLAN:${String(data?.challanNumber || '').trim()}`,
@@ -2635,10 +2665,20 @@
                             if (!row.needsQr) continue;
                             const token = tokenMap.get(row.data.challanNumber);
                             if (!token?.qrDataUrl) {
-                                const offlineQrDataUrl = await tryGenerateOfflineQrDataUrl(row.data);
-                                row.qrState = offlineQrDataUrl
-                                    ? { paymentUrl: '', qrImageUrl: offlineQrDataUrl, status: 'Offline QR generated (manual verification).', fallbackLabel: 'QR' }
-                                    : { paymentUrl: '', qrImageUrl: '', status: 'QR could not be generated', fallbackLabel: 'QR' };
+                                try {
+                                    const single = await requestChallanToken(row.data);
+                                    row.qrState = {
+                                        paymentUrl: single.paymentUrl || '',
+                                        qrImageUrl: single.qrDataUrl || '',
+                                        status: `Scanning will automatically mark ${row.data.feeMonth} fee as paid.`,
+                                        fallbackLabel: 'QR'
+                                    };
+                                } catch (error) {
+                                    const offlineQrDataUrl = await tryGenerateOfflineQrDataUrl(row.data);
+                                    row.qrState = offlineQrDataUrl
+                                        ? { paymentUrl: '', qrImageUrl: offlineQrDataUrl, status: 'Offline QR generated (manual verification).', fallbackLabel: 'QR' }
+                                        : { paymentUrl: '', qrImageUrl: '', status: 'QR could not be generated', fallbackLabel: 'QR' };
+                                }
                                 continue;
                             }
                             row.qrState = {
@@ -2649,18 +2689,30 @@
                             };
                         }
                     } else {
-                        for (const row of challans) {
-                            if (!row.needsQr) continue;
-                            const offlineQrDataUrl = await tryGenerateOfflineQrDataUrl(row.data);
-                            row.qrState = offlineQrDataUrl
-                                ? { paymentUrl: '', qrImageUrl: offlineQrDataUrl, status: 'Offline QR generated (manual verification).', fallbackLabel: 'QR' }
-                                : { paymentUrl: '', qrImageUrl: '', status: 'QR could not be generated', fallbackLabel: 'QR' };
-                        }
+                        const needsRows = challans.filter((row) => row.needsQr);
+                        await mapWithConcurrency(needsRows, 6, async (row) => {
+                            try {
+                                const single = await requestChallanToken(row.data);
+                                row.qrState = {
+                                    paymentUrl: single.paymentUrl || '',
+                                    qrImageUrl: single.qrDataUrl || '',
+                                    status: `Scanning will automatically mark ${row.data.feeMonth} fee as paid.`,
+                                    fallbackLabel: 'QR'
+                                };
+                            } catch (error) {
+                                const offlineQrDataUrl = await tryGenerateOfflineQrDataUrl(row.data);
+                                row.qrState = offlineQrDataUrl
+                                    ? { paymentUrl: '', qrImageUrl: offlineQrDataUrl, status: 'Offline QR generated (manual verification).', fallbackLabel: 'QR' }
+                                    : { paymentUrl: '', qrImageUrl: '', status: 'QR could not be generated', fallbackLabel: 'QR' };
+                            }
+                        });
                     }
                 }
 
                 printSheet.innerHTML = challans.map(row => buildBulkGroupMarkup(row.data, row.qrState)).join('');
                 hideClassStudentsPopup();
+                await new Promise((resolve) => requestAnimationFrame(() => resolve()));
+                await waitForPrintImages(printSheet);
                 window.print();
             } catch (error) {
                 alert(error?.message || 'Bulk challans could not be generated.');
@@ -2689,6 +2741,55 @@
 
         function escapeHtml(value) {
             return String(value || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+        }
+
+        async function waitForPrintImages(container) {
+            const root = container || document;
+            const images = Array.from(root.querySelectorAll('img'));
+            if (!images.length) return;
+
+            const loadPromises = images.map((img) => {
+                try {
+                    if (img.complete && img.naturalWidth > 0) {
+                        return Promise.resolve();
+                    }
+                    if (typeof img.decode === 'function') {
+                        return img.decode().catch(() => {});
+                    }
+                    return new Promise((resolve) => {
+                        const done = () => resolve();
+                        img.addEventListener('load', done, { once: true });
+                        img.addEventListener('error', done, { once: true });
+                        setTimeout(done, 1200);
+                    });
+                } catch (error) {
+                    return Promise.resolve();
+                }
+            });
+
+            await Promise.race([
+                Promise.all(loadPromises),
+                new Promise((resolve) => setTimeout(resolve, 2500))
+            ]);
+        }
+
+        async function mapWithConcurrency(list, limit, mapper) {
+            const items = Array.isArray(list) ? list : [];
+            const safeLimit = Math.max(1, Number(limit || 1));
+            const results = new Array(items.length);
+            let index = 0;
+
+            const workerCount = Math.min(safeLimit, items.length);
+            const workers = Array.from({ length: workerCount }, async () => {
+                while (true) {
+                    const current = index++;
+                    if (current >= items.length) return;
+                    results[current] = await mapper(items[current], current);
+                }
+            });
+
+            await Promise.all(workers);
+            return results;
         }
     </script>
 </body>

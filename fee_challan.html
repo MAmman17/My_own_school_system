@@ -1204,6 +1204,7 @@
 
     <script src="auth.js"></script>
     <script src="script.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.4/build/qrcode.min.js"></script>
     <script>
         const CHALLAN_BRANCH_CONTACTS = {
             main: {
@@ -1255,6 +1256,7 @@
             await loadChallanStudents();
             bindChallanFilterDropdown();
             bindChallanActionsDropdown();
+            bindFeePaymentSocketListener();
             populateCampusFilter();
             populateClassFilter();
             populateStudents();
@@ -1613,6 +1615,19 @@
             return CHALLAN_MONTHS.find(month => lower.includes(month.toLowerCase()) || lower.includes(month.slice(0, 3).toLowerCase())) || raw;
         }
 
+        function extractChallanMonthNames(value) {
+            const raw = String(value || '').trim();
+            if (!raw) return [];
+            const lower = raw.toLowerCase();
+            const hits = CHALLAN_MONTHS.filter(month => lower.includes(month.toLowerCase()) || lower.includes(month.slice(0, 3).toLowerCase()));
+            if (hits.length) return hits;
+
+            const parsed = new Date(raw.replace(',', ' 1,'));
+            if (!Number.isNaN(parsed.getTime())) return [CHALLAN_MONTHS[parsed.getMonth()]];
+            const single = getChallanLongMonthName(raw);
+            return single ? [single] : [];
+        }
+
         async function mergeChallanFeePaymentsIntoMonthlyStore() {
             try {
                 const endpoints = [
@@ -1634,16 +1649,50 @@
 
                 payments.forEach((payment) => {
                     if (payment.status !== 'Paid' || !payment.studentId) return;
-                    const month = getChallanLongMonthName(payment.feeMonth);
-                    if (!month) return;
+                    const months = extractChallanMonthNames(payment.feeMonth);
+                    if (!months.length) return;
                     monthlyFees[payment.studentId] = monthlyFees[payment.studentId] || {};
-                    monthlyFees[payment.studentId][month] = 'Paid';
+                    months.forEach((month) => {
+                        if (month) monthlyFees[payment.studentId][month] = 'Paid';
+                    });
                 });
 
                 localStorage.setItem(CHALLAN_MONTHLY_FEES_KEY, JSON.stringify(monthlyFees));
             } catch (error) {
                 console.warn('Fee payments could not be loaded:', error.message);
             }
+        }
+
+        function bindFeePaymentSocketListener() {
+            if (window.__feeChallanFeePaymentSocketBound) return;
+            window.__feeChallanFeePaymentSocketBound = true;
+
+            if (typeof socket === 'undefined' || !socket?.on) return;
+
+            socket.on('fee_payment_update', (payload) => {
+                try {
+                    const payment = payload?.payment || payload;
+                    if (!payment || payment.status !== 'Paid' || !payment.studentId) return;
+
+                    const months = extractChallanMonthNames(payment.feeMonth);
+                    if (!months.length) return;
+
+                    const monthlyFees = JSON.parse(localStorage.getItem(CHALLAN_MONTHLY_FEES_KEY) || '{}');
+                    monthlyFees[payment.studentId] = monthlyFees[payment.studentId] || {};
+                    months.forEach((month) => {
+                        if (month) monthlyFees[payment.studentId][month] = 'Paid';
+                    });
+                    localStorage.setItem(CHALLAN_MONTHLY_FEES_KEY, JSON.stringify(monthlyFees));
+
+                    const selectedStudent = getSelectedChallanStudent();
+                    if (selectedStudent && String(selectedStudent.id) === String(payment.studentId)) {
+                        updateChallanPaidStateUI(isStudentFeePaid(selectedStudent));
+                        triggerChallanRefresh();
+                    }
+                } catch (error) {
+                    console.warn('fee_payment_update could not be processed:', error?.message || error);
+                }
+            });
         }
 
         function populateStudents() {
@@ -2144,15 +2193,55 @@
                 };
             } catch (error) {
                 if (requestId !== challanQrRequestId) return;
-                challanQrState = {
-                    paymentUrl: '',
-                    qrImageUrl: '',
-                    status: error.message || 'QR code could not be generated.'
-                };
+                const offlineQrDataUrl = await tryGenerateOfflineQrDataUrl(data);
+                challanQrState = offlineQrDataUrl
+                    ? {
+                        paymentUrl: '',
+                        qrImageUrl: offlineQrDataUrl,
+                        status: 'Offline QR generated (manual verification).'
+                    }
+                    : {
+                        paymentUrl: '',
+                        qrImageUrl: '',
+                        status: error.message || 'QR code could not be generated.'
+                    };
             }
 
             renderQrPreviewBlock();
             renderChallanPreview();
+        }
+
+        function buildOfflineQrText(data) {
+            const parts = [
+                `CHALLAN:${String(data?.challanNumber || '').trim()}`,
+                `SID:${String(data?.sid || '').trim()}`,
+                `ADM:${String(data?.admissionNo || '').trim()}`,
+                `NAME:${String(data?.studentName || '').trim()}`,
+                `CLASS:${String(data?.classSection || '').trim()}`,
+                `MONTH:${String(data?.feeMonth || '').trim()}`,
+                `AMOUNT:${String(data?.totalDue ?? '').trim()}`
+            ].filter(Boolean);
+
+            return parts.join('|').slice(0, 750);
+        }
+
+        async function tryGenerateOfflineQrDataUrl(data) {
+            const generator = window.QRCode && typeof window.QRCode.toDataURL === 'function' ? window.QRCode : null;
+            if (!generator) return '';
+            const text = buildOfflineQrText(data);
+            if (!text || !text.includes('CHALLAN:')) return '';
+
+            try {
+                const maybePromise = generator.toDataURL(text, {
+                    errorCorrectionLevel: 'M',
+                    margin: 1,
+                    width: 220
+                });
+                const qrDataUrl = await Promise.resolve(maybePromise);
+                return typeof qrDataUrl === 'string' ? qrDataUrl : '';
+            } catch (err) {
+                return '';
+            }
         }
 
         function renderChallanPreview() {
@@ -2542,12 +2631,15 @@
                     const result = await response.json().catch(() => ({}));
                     if (response.ok && result?.success && Array.isArray(result.tokens)) {
                         const tokenMap = new Map(result.tokens.map(token => [token.challanNumber, token]));
-                        challans.forEach((row) => {
-                            if (!row.needsQr) return;
+                        for (const row of challans) {
+                            if (!row.needsQr) continue;
                             const token = tokenMap.get(row.data.challanNumber);
                             if (!token?.qrDataUrl) {
-                                row.qrState = { paymentUrl: '', qrImageUrl: '', status: 'QR could not be generated', fallbackLabel: 'QR' };
-                                return;
+                                const offlineQrDataUrl = await tryGenerateOfflineQrDataUrl(row.data);
+                                row.qrState = offlineQrDataUrl
+                                    ? { paymentUrl: '', qrImageUrl: offlineQrDataUrl, status: 'Offline QR generated (manual verification).', fallbackLabel: 'QR' }
+                                    : { paymentUrl: '', qrImageUrl: '', status: 'QR could not be generated', fallbackLabel: 'QR' };
+                                continue;
                             }
                             row.qrState = {
                                 paymentUrl: token.paymentUrl || '',
@@ -2555,13 +2647,15 @@
                                 status: `Scanning will automatically mark ${row.data.feeMonth} fee as paid.`,
                                 fallbackLabel: 'QR'
                             };
-                        });
+                        }
                     } else {
-                        challans.forEach((row) => {
-                            if (row.needsQr) {
-                                row.qrState = { paymentUrl: '', qrImageUrl: '', status: 'QR could not be generated', fallbackLabel: 'QR' };
-                            }
-                        });
+                        for (const row of challans) {
+                            if (!row.needsQr) continue;
+                            const offlineQrDataUrl = await tryGenerateOfflineQrDataUrl(row.data);
+                            row.qrState = offlineQrDataUrl
+                                ? { paymentUrl: '', qrImageUrl: offlineQrDataUrl, status: 'Offline QR generated (manual verification).', fallbackLabel: 'QR' }
+                                : { paymentUrl: '', qrImageUrl: '', status: 'QR could not be generated', fallbackLabel: 'QR' };
+                        }
                     }
                 }
 

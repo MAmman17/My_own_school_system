@@ -1729,7 +1729,7 @@ app.get('/api/fees/pay/:token', async (req, res) => {
         const paidAt = existingPayment?.paidAt || new Date();
         const paymentDateLabel = paidAt.toLocaleDateString('en-GB');
 
-        await FeePayment.upsert({
+        const paymentRow = {
             challanNumber: payload.challanNumber,
             studentId: payload.studentId,
             studentName: payload.studentName || student.fullName || '',
@@ -1742,17 +1742,36 @@ app.get('/api/fees/pay/:token', async (req, res) => {
             paidAt,
             paymentDateLabel,
             paymentSource: 'QR Scan'
-        });
+        };
 
-        await Student.update({
-            feesStatus: 'Paid',
-            paymentDate: paymentDateLabel
-        }, {
-            where: { id: payload.studentId }
-        });
+        await FeePayment.upsert(paymentRow);
+
+        const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+        const getLongMonthName = (value) => {
+            const raw = String(value || '').trim();
+            if (!raw) return '';
+            const parsed = new Date(raw.replace(',', ' 1,'));
+            if (!Number.isNaN(parsed.getTime())) return MONTHS[parsed.getMonth()];
+            const lower = raw.toLowerCase();
+            return MONTHS.find((month) => lower.includes(month.toLowerCase()) || lower.includes(month.slice(0, 3).toLowerCase())) || raw;
+        };
+
+        const currentMonthName = MONTHS[new Date().getMonth()];
+        const paidMonthName = getLongMonthName(payload.feeMonth);
+        const shouldUpdateCurrentMonthStatus = paidMonthName === currentMonthName;
+
+        if (shouldUpdateCurrentMonthStatus) {
+            await Student.update({
+                feesStatus: 'Paid',
+                paymentDate: paymentDateLabel
+            }, {
+                where: { id: payload.studentId }
+            });
+        }
 
         const allStudents = await Student.findAll();
         io.emit('students_update', allStudents);
+        io.emit('fee_payment_update', { payment: paymentRow });
 
         return res.send(renderFeePaymentPage({
             title: existingPayment?.status === 'Paid' ? 'Already Marked Paid' : 'Fee Marked Paid',

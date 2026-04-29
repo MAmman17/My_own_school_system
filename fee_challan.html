@@ -853,6 +853,13 @@
             .challan-bulk-group {
                 break-inside: avoid;
                 page-break-inside: avoid;
+                break-after: page;
+                page-break-after: always;
+            }
+
+            .challan-bulk-group:last-child {
+                break-after: auto;
+                page-break-after: auto;
             }
 
             .challan-bulk-group + .challan-bulk-group {

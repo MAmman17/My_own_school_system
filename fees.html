@@ -1133,7 +1133,7 @@
 
         function openManualPaymentModal(studentId) {
             const students = getData(STORAGE_KEY_STUDENTS);
-            const student = students.find(s => s.id === studentId);
+            const student = (students || []).find(s => String(s?.id || '') === String(studentId || ''));
             const monthlyFees = JSON.parse(localStorage.getItem(STORAGE_KEY_MONTHLY_FEES)) || {};
             const studentRecord = monthlyFees[studentId] || {};
             const paymentDetails = JSON.parse(localStorage.getItem('eduCore_payment_details') || '{}');
@@ -1191,63 +1191,130 @@
             document.getElementById('manualPaymentModal').dataset.studentId = '';
         }
 
-        function submitManualPayment() {
+        async function submitManualPayment() {
             const modal = document.getElementById('manualPaymentModal');
-            const studentId = modal.dataset.studentId;
-            const month = document.getElementById('paymentMonth').value;
+            const studentId = String(modal.dataset.studentId || '').trim();
+            const month = String(document.getElementById('paymentMonth').value || '').trim();
             const amount = parseInt(document.getElementById('paymentAmount').value || '0', 10);
+
+            if (!studentId) {
+                alert('Student is missing. Please reopen the payment modal.');
+                return;
+            }
 
             if (!month) {
                 alert('Please select a month');
                 return;
             }
 
-            if (amount <= 0) {
+            if (!Number.isFinite(amount) || amount <= 0) {
                 alert('Please enter a valid amount');
                 return;
             }
 
-            const paymentDetails = JSON.parse(localStorage.getItem('eduCore_payment_details') || '{}');
-            if (!paymentDetails[studentId]) paymentDetails[studentId] = {};
+            const students = getData(STORAGE_KEY_STUDENTS) || [];
+            const student = students.find((s) => String(s?.id || '') === studentId);
+            const monthlyFee = Number(student?.monthlyFee || 0) || 0;
 
-            // ADD to existing payment instead of replacing it
-            const existingPayment = paymentDetails[studentId][month] || { amount: 0, challanNumbers: [] };
-            const totalAmount = (existingPayment.amount || 0) + amount;
-
-            paymentDetails[studentId][month] = {
-                amount: totalAmount,
-                challanNumbers: existingPayment.challanNumbers || [],
-                date: new Date().toISOString(),
-                type: 'manual'
+            const payload = {
+                studentId,
+                studentName: student?.fullName || student?.studentName || '',
+                rollNo: student?.rollNo || '',
+                classGrade: student?.classGrade || '',
+                session: student?.session || '',
+                feeMonth: month,
+                feeMonths: [month],
+                amount,
+                fullAmount: monthlyFee || amount
             };
 
-            localStorage.setItem('eduCore_payment_details', JSON.stringify(paymentDetails));
-            closeManualPaymentModal();
-            renderMonthlyFeeRecord(studentId);
-            alert('Payment recorded successfully!');
+            try {
+                if (typeof syncToSQLDetailed === 'function') {
+                    const result = await syncToSQLDetailed('fees/manual-payment', payload);
+                    if (!result?.success) throw new Error(result?.error || 'Manual payment failed.');
+                } else {
+                    const token = sessionStorage.getItem('eduCore_token') || '';
+                    const response = await fetch(`${API_BASE_URL}/fees/manual-payment`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            ...(token ? { Authorization: `Bearer ${token}` } : {})
+                        },
+                        body: JSON.stringify(payload)
+                    });
+                    const body = await response.json().catch(() => ({}));
+                    if (!response.ok || body?.success === false) {
+                        throw new Error(body?.message || 'Manual payment failed.');
+                    }
+                }
+
+                // Refresh local fee state from server so it survives reloads.
+                await mergeFeePaymentsIntoMonthlyStore();
+
+                closeManualPaymentModal();
+                renderMonthlyFeeRecord(studentId);
+                alert('Payment recorded successfully!');
+            } catch (e) {
+                alert(`Payment could not be saved to server: ${e.message || e}`);
+            }
         }
 
-        function toggleMonthFee(studentId, month) {
-            const monthlyFees = JSON.parse(localStorage.getItem(STORAGE_KEY_MONTHLY_FEES)) || {};
-            if (!monthlyFees[studentId]) monthlyFees[studentId] = {};
+        async function toggleMonthFee(studentId, month) {
+            const sid = String(studentId || '').trim();
+            const key = String(month || '').trim();
+            if (!sid || !key) return;
 
-            const currentStatus = monthlyFees[studentId][month];
-            const newStatus = currentStatus === 'Paid' ? 'Unpaid' : 'Paid';
-            monthlyFees[studentId][month] = newStatus;
+            const students = getData(STORAGE_KEY_STUDENTS) || [];
+            const student = students.find((s) => String(s?.id || '') === sid);
+            const monthlyFee = Number(student?.monthlyFee || 0) || 0;
 
-            localStorage.setItem(STORAGE_KEY_MONTHLY_FEES, JSON.stringify(monthlyFees));
+            // "Mark Paid" should persist as a manual payment, otherwise it resets after refresh.
+            const paymentDetails = JSON.parse(localStorage.getItem('eduCore_payment_details') || '{}');
+            const alreadyPaid = Number(paymentDetails?.[sid]?.[key]?.amount || 0) || 0;
+            const due = Math.max(monthlyFee - alreadyPaid, 0);
 
-            // Sync with global student status if it's the current month
-            if (month === CURRENT_MONTH_NAME) {
-                const students = getData(STORAGE_KEY_STUDENTS);
-                const idx = students.findIndex(s => s.id === studentId);
-                if (idx !== -1) {
-                    students[idx].feesStatus = (newStatus === 'Paid' ? 'Paid' : 'Pending');
-                    saveData(STORAGE_KEY_STUDENTS, students);
-                }
+            if (due <= 0) {
+                alert('This month is already paid.');
+                return;
             }
 
-            renderMonthlyFeeRecord(studentId);
+            const payload = {
+                studentId: sid,
+                studentName: student?.fullName || student?.studentName || '',
+                rollNo: student?.rollNo || '',
+                classGrade: student?.classGrade || '',
+                session: student?.session || '',
+                feeMonth: key,
+                feeMonths: [key],
+                amount: due,
+                fullAmount: monthlyFee || due
+            };
+
+            try {
+                if (typeof syncToSQLDetailed === 'function') {
+                    const result = await syncToSQLDetailed('fees/manual-payment', payload);
+                    if (!result?.success) throw new Error(result?.error || 'Mark paid failed.');
+                } else {
+                    const token = sessionStorage.getItem('eduCore_token') || '';
+                    const response = await fetch(`${API_BASE_URL}/fees/manual-payment`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            ...(token ? { Authorization: `Bearer ${token}` } : {})
+                        },
+                        body: JSON.stringify(payload)
+                    });
+                    const body = await response.json().catch(() => ({}));
+                    if (!response.ok || body?.success === false) {
+                        throw new Error(body?.message || 'Mark paid failed.');
+                    }
+                }
+
+                await mergeFeePaymentsIntoMonthlyStore();
+                renderMonthlyFeeRecord(sid);
+            } catch (e) {
+                alert(`Could not mark paid: ${e.message || e}`);
+            }
         }
 
         function backToFeesList() {

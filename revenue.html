@@ -123,6 +123,7 @@
             width: 100%;
             border-collapse: collapse;
             font-size: 0.9rem;
+            table-layout: fixed;
         }
 
         .monthwise-table th,
@@ -131,6 +132,9 @@
             padding: 0.75rem 0.9rem;
             border-bottom: 1px solid var(--border-color);
             vertical-align: middle;
+            white-space: normal;
+            overflow-wrap: anywhere;
+            word-break: break-word;
         }
 
         .monthwise-table th {
@@ -152,6 +156,7 @@
             overflow: auto;
             border: 1px solid var(--border-color);
             border-radius: 0.75rem;
+            overflow-x: hidden;
         }
 
         .overall-metrics {

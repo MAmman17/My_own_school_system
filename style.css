@@ -35,6 +35,7 @@ body {
     height: 100vh;
     display: flex;
     flex-direction: column;
+    overflow-x: hidden;
 }
 
 a {
@@ -93,7 +94,7 @@ ul {
 .login-layout {
     display: flex;
     height: 100vh;
-    width: 100vw;
+    width: 100%;
     background: rgba(32, 176, 164, 0.08);
     /* Light teal background */
     align-items: center;
@@ -463,6 +464,7 @@ ul {
 .main-content {
     flex: 1;
     overflow-y: auto;
+    overflow-x: hidden;
     padding: 2rem;
     background: linear-gradient(180deg, #f7fffe 0%, #edf9f7 100%);
 }
@@ -792,6 +794,7 @@ ul {
 table {
     width: 100%;
     border-collapse: collapse;
+    table-layout: fixed;
 }
 
 thead th {
@@ -803,7 +806,8 @@ thead th {
     text-transform: uppercase;
     letter-spacing: 0.05em;
     border-bottom: 1px solid var(--border-color);
-    white-space: nowrap;
+    white-space: normal;
+    overflow-wrap: anywhere;
     background: #fcfdfe;
 }
 
@@ -813,6 +817,8 @@ tbody td {
     font-size: 0.9rem;
     color: var(--text-primary);
     vertical-align: middle;
+    overflow-wrap: anywhere;
+    word-break: break-word;
 }
 
 tbody tr {
@@ -2281,13 +2287,13 @@ button {
 /* === Responsive Table Fit (Global) === */
 .table-container {
     width: 100%;
-    overflow-x: auto !important;
+    overflow-x: hidden !important;
 }
 
 .table-container table {
     width: 100% !important;
-    min-width: max-content !important;
-    table-layout: auto;
+    min-width: 100% !important;
+    table-layout: fixed;
 }
 
 .table-container thead th,
@@ -2295,21 +2301,23 @@ button {
     min-width: 0 !important;
     max-width: none;
     white-space: normal;
-    overflow-wrap: break-word;
-    word-break: normal;
+    overflow-wrap: anywhere;
+    word-break: break-word;
 }
 
 /* Keep action cells usable without forcing full table overflow */
 #studentsTable td:nth-child(10),
 #teachersTable td:nth-child(11),
 #staffTable td:nth-child(11) {
-    white-space: nowrap !important;
+    white-space: normal !important;
 }
 
 .table-action-wrap {
     display: flex;
     justify-content: center;
     width: 100%;
+    flex-wrap: wrap;
+    gap: 0.4rem;
 }
 
 .table-action-select {

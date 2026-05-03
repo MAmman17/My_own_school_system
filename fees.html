@@ -303,7 +303,11 @@
         <!-- Sidebar -->
         <aside class="sidebar">
             <div class="logo-section">
-                <i data-lucide="graduation-cap"></i> Apexiums School System
+                <i data-lucide="graduation-cap" style="font-size: 2.5rem; margin-bottom: 0.5rem;"></i>
+                <div style="display: flex; flex-direction: column; align-items: center; gap: 0;">
+                    <span style="font-size: 1rem; line-height: 1.2;">Apexiums School</span>
+                    <span style="font-size: 1rem; line-height: 1.2;">System</span>
+                </div>
             </div>
 
             <nav class="nav-links">
@@ -458,6 +462,33 @@
                 </div>
             </div>
 
+            <!-- Manual Payment Modal -->
+            <div id="manualPaymentModal" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0, 0, 0, 0.5); z-index: 1000; align-items: center; justify-content: center;">
+                <div style="background: white; border-radius: 0.75rem; padding: 2rem; max-width: 500px; width: 90%; box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1);">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
+                        <h3 style="margin: 0; font-size: 1.2rem; font-weight: 700;">Add Manual Payment</h3>
+                        <button onclick="closeManualPaymentModal()" style="background: none; border: none; font-size: 1.5rem; cursor: pointer; color: #666;">&times;</button>
+                    </div>
+                    
+                    <div style="margin-bottom: 1rem;">
+                        <label style="display: block; margin-bottom: 0.5rem; font-weight: 600;">Month</label>
+                        <select id="paymentMonth" style="width: 100%; padding: 0.75rem; border: 1px solid #d1d5db; border-radius: 0.5rem; font-size: 1rem;">
+                            <option value="">Select Month</option>
+                        </select>
+                    </div>
+
+                    <div style="margin-bottom: 1rem;">
+                        <label style="display: block; margin-bottom: 0.5rem; font-weight: 600;">Amount (PKR)</label>
+                        <input type="number" id="paymentAmount" placeholder="Enter amount" style="width: 100%; padding: 0.75rem; border: 1px solid #d1d5db; border-radius: 0.5rem; font-size: 1rem;" min="0" />
+                    </div>
+
+                    <div style="display: flex; gap: 1rem; margin-top: 1.5rem;">
+                        <button onclick="closeManualPaymentModal()" style="flex: 1; padding: 0.75rem; border: 1px solid #d1d5db; background: white; border-radius: 0.5rem; cursor: pointer; font-weight: 600;">Cancel</button>
+                        <button onclick="submitManualPayment()" style="flex: 1; padding: 0.75rem; background: #10b981; color: white; border: none; border-radius: 0.5rem; cursor: pointer; font-weight: 600;">Save Payment</button>
+                    </div>
+                </div>
+            </div>
+
         </main>
     </div>
 
@@ -500,14 +531,63 @@
         }
 
         function getStudentFeeSummary(student) {
+            if (isStudentTerminated(student)) {
+                return { paidCount: 0, pendingCount: 0, paidAmount: 0, pendingAmount: 0, totalAmount: 0 };
+            }
             const monthlyFees = JSON.parse(localStorage.getItem(STORAGE_KEY_MONTHLY_FEES)) || {};
+            const paymentDetails = JSON.parse(localStorage.getItem('eduCore_payment_details') || '{}');
             const studentMonthly = monthlyFees[student.id] || {};
-            const paidMonths = monthsList.filter(month => studentMonthly[month] === 'Paid');
-            const pendingMonths = monthsList.filter(month => studentMonthly[month] !== 'Paid');
+            const studentPayments = paymentDetails[student.id] || {};
+            
+            // Get admission month and year
+            let admissionMonthIndex = 0;
+            let admissionYear = new Date().getFullYear();
+            
+            if (student?.admissionDate) {
+                const admissionDate = new Date(student.admissionDate);
+                admissionMonthIndex = admissionDate.getMonth();
+                admissionYear = admissionDate.getFullYear();
+            }
+
+            const currentYear = new Date().getFullYear();
+            const currentMonthIndex = new Date().getMonth();
+
+            // Generate all months from admission date to current month
+            const applicableMonths = [];
+            for (let year = admissionYear; year <= currentYear; year++) {
+                const startMonth = year === admissionYear ? admissionMonthIndex : 0;
+                const endMonth = year === currentYear ? currentMonthIndex : 11;
+                
+                for (let i = startMonth; i <= endMonth; i++) {
+                    applicableMonths.push(monthsList[i]);
+                }
+            }
+
+            const monthlyFee = parseInt(student.monthlyFee || 0, 10) || 0;
+            const paidMonths = [];
+            const pendingMonths = [];
+
+            let paidAmount = 0;
+            let pendingAmount = 0;
+
+            applicableMonths.forEach((month) => {
+                const paidForMonth = Number(studentPayments[month]?.amount || 0) || (studentMonthly[month] === 'Paid' ? monthlyFee : 0);
+                paidAmount += paidForMonth;
+                const dueForMonth = Math.max(monthlyFee - paidForMonth, 0);
+                pendingAmount += dueForMonth;
+                if (monthlyFee > 0 && dueForMonth <= 0) {
+                    paidMonths.push(month);
+                } else {
+                    pendingMonths.push(month);
+                }
+            });
+            
             return {
                 paidCount: paidMonths.length,
                 pendingCount: pendingMonths.length,
-                pendingAmount: pendingMonths.length * (parseInt(student.monthlyFee || 0, 10) || 0)
+                paidAmount: paidAmount,
+                pendingAmount: pendingAmount,
+                totalAmount: paidAmount + pendingAmount
             };
         }
 
@@ -520,23 +600,72 @@
             return monthsList.find(month => lower.includes(month.toLowerCase()) || lower.includes(month.slice(0, 3).toLowerCase())) || raw;
         }
 
+        function extractMonthNames(value) {
+            const raw = String(value || '').trim();
+            if (!raw) return [];
+            const lower = raw.toLowerCase();
+            const hits = monthsList.filter(month => lower.includes(month.toLowerCase()) || lower.includes(month.slice(0, 3).toLowerCase()));
+            if (hits.length) return hits;
+
+            const parsed = new Date(raw.replace(',', ' 1,'));
+            if (!Number.isNaN(parsed.getTime())) return [monthsList[parsed.getMonth()]];
+            const single = getLongMonthName(raw);
+            return single ? [single] : [];
+        }
+
         async function mergeFeePaymentsIntoMonthlyStore() {
             try {
                 const response = await fetch(`${API_BASE_URL}/fees/payments`);
                 if (!response.ok) return;
                 const result = await response.json();
                 const payments = Array.isArray(result.payments) ? result.payments : [];
-                const monthlyFees = JSON.parse(localStorage.getItem(STORAGE_KEY_MONTHLY_FEES) || '{}');
+
+                // Rebuild from scratch for consistency.
+                const monthlyFees = {};
+                const paymentDetails = {};
+                const students = getData(STORAGE_KEY_STUDENTS) || [];
+                const studentsById = new Map(students.map((s) => [String(s?.id || ''), s]));
+
+                const ensureStudent = (studentId) => {
+                    const sid = String(studentId || '').trim();
+                    if (!sid) return '';
+                    monthlyFees[sid] = monthlyFees[sid] || {};
+                    paymentDetails[sid] = paymentDetails[sid] || {};
+                    return sid;
+                };
+
+                const addPayment = (studentId, month, amount, challanNumber = '') => {
+                    const sid = ensureStudent(studentId);
+                    const key = String(month || '').trim();
+                    if (!sid || !key) return;
+
+                    const prev = paymentDetails[sid][key] || { amount: 0, challanNumbers: [] };
+                    const nextAmount = Number(prev.amount || 0) + Number(amount || 0);
+                    paymentDetails[sid][key] = {
+                        amount: nextAmount,
+                        challanNumbers: Array.from(new Set([...(prev.challanNumbers || []), challanNumber].filter(Boolean)))
+                    };
+
+                    const student = studentsById.get(sid);
+                    const monthlyFee = Number(student?.monthlyFee || 0);
+                    if (monthlyFee > 0 && nextAmount >= monthlyFee) {
+                        monthlyFees[sid][key] = 'Paid';
+                    } else {
+                        monthlyFees[sid][key] = 'Pending';
+                    }
+                };
 
                 payments.forEach((payment) => {
-                    if (payment.status !== 'Paid' || !payment.studentId) return;
-                    const month = getLongMonthName(payment.feeMonth);
-                    if (!month) return;
-                    monthlyFees[payment.studentId] = monthlyFees[payment.studentId] || {};
-                    monthlyFees[payment.studentId][month] = 'Paid';
+                    if (!payment?.studentId || !['Paid', 'Partial'].includes(String(payment.status || ''))) return;
+                    const months = extractMonthNames(payment.feeMonth);
+                    if (!months.length) return;
+                    const totalAmount = Number(payment.amount || 0);
+                    const perMonthAmount = months.length ? (totalAmount / months.length) : totalAmount;
+                    months.forEach((month) => addPayment(payment.studentId, month, perMonthAmount, payment.challanNumber || ''));
                 });
 
                 localStorage.setItem(STORAGE_KEY_MONTHLY_FEES, JSON.stringify(monthlyFees));
+                localStorage.setItem('eduCore_payment_details', JSON.stringify(paymentDetails));
             } catch (error) {
                 console.warn('Fee payments could not be loaded:', error.message);
             }
@@ -603,8 +732,8 @@
 
         const feeClasses = [
             { id: 'play', name: 'Play Group', icon: 'baby', keywords: ['play', 'pg', 'playgroup', 'play group', 'play-group'] },
-            { id: 'nursery', name: 'Nursery', icon: 'palette', keywords: ['nursery', 'nursary', 'nur'] },
-            { id: 'prep', name: 'Prep', icon: 'pencil', keywords: ['prep', 'preschool', 'pre'] },
+            { id: 'kg1', name: 'KG1', icon: 'palette', keywords: ['kg1', 'nursery', 'nursary', 'nur'] },
+            { id: 'kg2', name: 'KG2', icon: 'pencil', keywords: ['kg2', 'prep', 'preschool', 'pre'] },
             { id: '1', name: 'Class One', icon: 'book', keywords: ['1', 'one', '1st', 'class 1', 'class one'] },
             { id: '2', name: 'Class Two', icon: 'book', keywords: ['2', 'two', '2nd', 'class 2', 'class two'] },
             { id: '3', name: 'Class Three', icon: 'book', keywords: ['3', 'three', '3rd', 'class 3', 'class three'] },
@@ -617,9 +746,16 @@
             { id: '10', name: 'Class Ten', icon: 'flask-conical', keywords: ['10', 'ten', '10th', 'class 10', 'class ten'] },
         ];
 
+        function isStudentTerminated(student) {
+            const enrollmentStatus = String(student?.enrollmentStatus || '').trim().toLowerCase();
+            if (enrollmentStatus === 'terminated' || enrollmentStatus === 'left' || enrollmentStatus === 'inactive') return true;
+            if (student?.isTerminated === true) return true;
+            return String(student?.feesStatus || '').trim().toLowerCase() === 'terminated';
+        }
+
         function renderFeesClassGrid() {
             const grid = document.getElementById('feesClassGrid');
-            const students = getData(STORAGE_KEY_STUDENTS);
+            const students = (getData(STORAGE_KEY_STUDENTS) || []).filter((s) => !isStudentTerminated(s));
             grid.innerHTML = '';
 
             const allCard = document.createElement('div');
@@ -680,7 +816,7 @@
         function renderClassStudentList(classId, term = '') {
             const tbody = document.getElementById('studentListTableBody');
             const noData = document.getElementById('noFeeData');
-            const students = getData(STORAGE_KEY_STUDENTS);
+            const students = (getData(STORAGE_KEY_STUDENTS) || []).filter((s) => !isStudentTerminated(s));
 
             let filteredStudents = [];
 
@@ -738,7 +874,8 @@
                     <td>
                         <div style="font-size:0.85rem;line-height:1.5;">
                             <div><strong>${feeSummary.paidCount}</strong> paid / <strong>${feeSummary.pendingCount}</strong> pending</div>
-                            <div style="color:var(--text-secondary);">Pending: PKR ${feeSummary.pendingAmount.toLocaleString('en-PK')}</div>
+                            <div style="color:var(--text-secondary);">Paid: PKR ${feeSummary.paidAmount.toLocaleString('en-PK')}</div>
+                            <div style="color:var(--danger-color); font-weight: 600;">Pending: PKR ${feeSummary.pendingAmount.toLocaleString('en-PK')}</div>
                         </div>
                     </td>
                     <td><span class="status-badge ${currentMonthStatus.className}"><i data-lucide="${currentMonthStatus.icon}" size="14"></i> ${currentMonthStatus.label}</span></td>
@@ -754,6 +891,10 @@
             const students = getData(STORAGE_KEY_STUDENTS);
             const student = students.find(s => s.id === studentId);
             if (!student) return;
+            if (isStudentTerminated(student)) {
+                alert('This student is marked as terminated (left school). Fee calculation is disabled.');
+                return;
+            }
 
             document.getElementById('feesTableView').classList.remove('active');
             document.getElementById('searchResultsInfo').style.display = 'none';
@@ -774,49 +915,316 @@
             const container = document.getElementById('monthListContainer');
             const monthlyFees = JSON.parse(localStorage.getItem(STORAGE_KEY_MONTHLY_FEES)) || {};
             const studentRecord = monthlyFees[studentId] || {};
+            const paymentDetails = JSON.parse(localStorage.getItem('eduCore_payment_details') || '{}');
+            const studentPayments = paymentDetails[studentId] || {};
             const students = getData(STORAGE_KEY_STUDENTS);
             const student = students.find(s => s.id === studentId);
+            if (student && isStudentTerminated(student)) {
+                container.innerHTML = `
+                    <div style="padding: 1.5rem; border: 2px dashed #ef4444; border-radius: 0.75rem; background: #fff1f2; color: #991b1b;">
+                        <div style="font-weight: 800; font-size: 1.05rem;">Student Left School (Terminated)</div>
+                        <div style="margin-top: 0.35rem; font-size: 0.9rem;">Fee record & calculations are disabled for this student.</div>
+                    </div>
+                `;
+                return;
+            }
 
             container.innerHTML = '';
 
-            monthsList.forEach(month => {
-                const isPaid = studentRecord[month] === 'Paid';
-                const isCurrentMonth = month === CURRENT_MONTH_NAME;
-                const row = document.createElement('div');
-                row.className = `month-row${isCurrentMonth ? ' current-month' : ''}`;
+            // Get admission month and year
+            let admissionMonthIndex = 0; // Default to January
+            let admissionYear = new Date().getFullYear();
+            
+            if (student?.admissionDate) {
+                const admissionDate = new Date(student.admissionDate);
+                admissionMonthIndex = admissionDate.getMonth(); // 0-indexed (0=Jan, 11=Dec)
+                admissionYear = admissionDate.getFullYear();
+            }
 
-                let badgeClass = isPaid ? 'status-paid-badge' : 'status-unpaid-badge';
-                let badgeIcon = isPaid ? 'check-circle' : 'clock';
-                let badgeLabel = isPaid ? 'Paid' : 'Unpaid';
+            const currentYear = new Date().getFullYear();
+            const currentMonthIndex = new Date().getMonth();
 
-                if (isCurrentMonth && !isPaid) {
-                    if ((student?.feesStatus || '').toLowerCase() === 'late') {
-                        badgeClass = 'status-late-badge';
-                        badgeIcon = 'alert-triangle';
-                        badgeLabel = 'Late';
-                    } else {
+            // Generate all months from admission date to current month
+            const applicableMonths = [];
+            for (let year = admissionYear; year <= currentYear; year++) {
+                const startMonth = year === admissionYear ? admissionMonthIndex : 0;
+                const endMonth = year === currentYear ? currentMonthIndex : 11;
+                
+                for (let i = startMonth; i <= endMonth; i++) {
+                    applicableMonths.push(monthsList[i]);
+                }
+            }
+
+            const monthlyFee = parseInt(student?.monthlyFee || 0, 10) || 0;
+            const getPaidForMonth = (month) => {
+                const paid = Number(studentPayments[month]?.amount || 0);
+                if (paid > 0) return paid;
+                if (studentRecord[month] === 'Paid' && monthlyFee > 0) return monthlyFee;
+                return 0;
+            };
+
+            // Paid/Pending based on actual paid amount for the month.
+            const pendingMonths = applicableMonths.filter((month) => getPaidForMonth(month) < monthlyFee);
+            const paidMonths = applicableMonths.filter((month) => getPaidForMonth(month) >= monthlyFee && monthlyFee > 0);
+
+            // Create header section showing summary
+            const headerDiv = document.createElement('div');
+            headerDiv.style.cssText = `
+                padding: 1.5rem;
+                background: linear-gradient(135deg, #fef3c7 0%, #fef9e7 100%);
+                border-radius: 0.75rem;
+                border: 2px solid #f59e0b;
+                margin-bottom: 1.5rem;
+                box-shadow: 0 4px 12px rgba(245, 158, 11, 0.1);
+            `;
+            
+            const paidAmountDisplay = paidMonths.reduce((sum, month) => sum + getPaidForMonth(month), 0);
+            const pendingAmountDisplay = pendingMonths.reduce((sum, month) => {
+                const paidForMonth = getPaidForMonth(month);
+                return sum + Math.max(monthlyFee - paidForMonth, 0);
+            }, 0);
+            const paidBreakdown = paidMonths.length
+                ? paidMonths.map((m) => `${m}: PKR ${getPaidForMonth(m).toLocaleString('en-PK')}`).join(', ')
+                : '';
+            const paidDisplay = paidAmountDisplay > 0 
+                ? `<div style="display:flex; align-items:center; gap: 0.5rem;"><i data-lucide="check-circle" size="20" style="color: #059669;"></i> <div><div style="font-size: 1.5rem; font-weight: 700; color: #059669;">PKR ${paidAmountDisplay.toLocaleString('en-PK')}</div><div style="font-size: 0.8rem; color: #065f46;">${paidBreakdown ? `Paid (${paidBreakdown})` : `Paid (${paidMonths.join(', ')})`}</div></div></div>`
+                : '';
+            
+            headerDiv.innerHTML = `
+                <div style="display: flex; justify-content: space-between; align-items: center; gap: 1rem; flex-wrap: wrap;">
+                    <div>
+                        <div style="font-size: 0.9rem; color: #b45309; font-weight: 600; margin-bottom: 0.5rem;">Fee Summary</div>
+                        <div style="display: flex; gap: 2rem; flex-wrap: wrap;">
+                            <div>
+                                <div style="font-size: 2rem; font-weight: 700; color: #dc2626;">${pendingMonths.length}</div>
+                                <div style="font-size: 0.8rem; color: #7f1d1d;">Months Pending</div>
+                            </div>
+                            <div>
+                                <div style="font-size: 2rem; font-weight: 700; color: #059669;">${paidMonths.length}</div>
+                                <div style="font-size: 0.8rem; color: #065f46;">Months Paid</div>
+                            </div>
+                            <div>
+                                <div style="font-size: 1.5rem; font-weight: 700; color: #dc2626;">PKR ${pendingAmountDisplay.toLocaleString('en-PK')}</div>
+                                <div style="font-size: 0.8rem; color: #7f1d1d;">Pending Amount</div>
+                            </div>
+                            ${paidDisplay}
+                        </div>
+                    </div>
+                </div>
+            `;
+            container.appendChild(headerDiv);
+
+            // Show pending months
+            if (pendingMonths.length === 0) {
+                const noData = document.createElement('div');
+                noData.style.cssText = `
+                    padding: 2rem;
+                    text-align: center;
+                    background: #dcfce7;
+                    border-radius: 0.75rem;
+                    border: 2px dashed #22c55e;
+                    color: #166534;
+                `;
+                noData.innerHTML = `
+                    <i data-lucide="check-circle" size="32" style="margin-bottom: 0.5rem; display: block;"></i>
+                    <div style="font-size: 1.1rem; font-weight: 700;">✓ All Fees Paid!</div>
+                    <div style="font-size: 0.9rem; margin-top: 0.5rem;">تمام فیسز ادا ہیں</div>
+                `;
+                container.appendChild(noData);
+            } else {
+                const titleDiv = document.createElement('div');
+                titleDiv.style.cssText = `
+                    padding: 1rem 0;
+                    border-bottom: 2px solid #e5e7eb;
+                    margin-bottom: 1rem;
+                    font-weight: 700;
+                    color: #991b1b;
+                    display: flex;
+                    justify-content: space-between;
+                    align-items: center;
+                `;
+                titleDiv.innerHTML = `
+                    <span>${pendingMonths.length} Pending Month(s) - Awaiting Payment</span>
+                    <button onclick="openManualPaymentModal('${studentId}')" style="background: #10b981; color: white; border: none; padding: 0.5rem 1rem; border-radius: 0.5rem; cursor: pointer; font-weight: 600; font-size: 0.9rem;">
+                        <i data-lucide="plus" size="16" style="vertical-align: middle; margin-right: 0.25rem;"></i> Add Payment
+                    </button>
+                `;
+                container.appendChild(titleDiv);
+
+                pendingMonths.forEach(month => {
+                    const isCurrentMonth = month === CURRENT_MONTH_NAME;
+                    const paidForMonth = getPaidForMonth(month);
+                    const dueForMonth = Math.max(monthlyFee - paidForMonth, 0);
+                    const row = document.createElement('div');
+                    row.className = `month-row${isCurrentMonth ? ' current-month' : ''}`;
+
+                    let badgeClass = 'status-unpaid-badge';
+                    let badgeIcon = 'clock';
+                    let badgeLabel = 'Unpaid';
+
+                    if (paidForMonth > 0) {
                         badgeClass = 'status-pending-badge';
                         badgeIcon = 'clock';
                         badgeLabel = 'Pending';
+                    } else if (isCurrentMonth) {
+                        if ((student?.feesStatus || '').toLowerCase() === 'late') {
+                            badgeClass = 'status-late-badge';
+                            badgeIcon = 'alert-triangle';
+                            badgeLabel = 'Late';
+                        } else {
+                            badgeClass = 'status-pending-badge';
+                            badgeIcon = 'clock';
+                            badgeLabel = 'Pending';
+                        }
                     }
-                }
 
-                row.innerHTML = `
-                    <div class="month-name">${month}</div>
-                    <div class="month-status">
-                        <span class="${badgeClass}">
-                            <i data-lucide="${badgeIcon}"></i>
-                            ${badgeLabel}
-                        </span>
-                        <button class="toggle-fee-btn ${isPaid ? 'btn-mark-unpaid' : 'btn-mark-paid'}" onclick="toggleMonthFee('${studentId}', '${month}')">
-                            ${isPaid ? 'Mark Unpaid' : 'Mark Paid'}
-                        </button>
-                    </div>
-                `;
-                container.appendChild(row);
-            });
+                    row.innerHTML = `
+                        <div class="month-name">${month}</div>
+                        <div class="month-status">
+                            <span class="${badgeClass}">
+                                <i data-lucide="${badgeIcon}"></i>
+                                ${badgeLabel}
+                            </span>
+                            ${paidForMonth > 0 ? `<span style="font-size: 0.8rem; color: #7f1d1d; margin-left: 0.5rem;">Paid: PKR ${paidForMonth.toLocaleString('en-PK')} | Due: PKR ${dueForMonth.toLocaleString('en-PK')}</span>` : ''}
+                            <button class="toggle-fee-btn btn-mark-paid" onclick="toggleMonthFee('${studentId}', '${month}')">
+                                <i data-lucide="check-circle" size="14"></i> Mark Paid
+                            </button>
+                        </div>
+                    `;
+                    container.appendChild(row);
+                });
+
+                // Show Paid Months section
+                if (paidMonths.length > 0) {
+                    const paidTitleDiv = document.createElement('div');
+                    paidTitleDiv.style.cssText = `
+                        padding: 1rem 0;
+                        border-bottom: 2px solid #e5e7eb;
+                        margin-top: 2rem;
+                        margin-bottom: 1rem;
+                        font-weight: 700;
+                        color: #065f46;
+                    `;
+                    paidTitleDiv.textContent = `${paidMonths.length} Paid Month(s)`;
+                    container.appendChild(paidTitleDiv);
+
+                    paidMonths.forEach(month => {
+                        const paidForMonth = getPaidForMonth(month);
+                        const row = document.createElement('div');
+                        row.className = 'month-row';
+                        row.style.background = '#f0fdf4';
+                        row.innerHTML = `
+                            <div class="month-name">${month}</div>
+                            <div class="month-status">
+                                <span class="status-paid-badge" style="background: #d1fae5; color: #065f46; padding: 0.25rem 0.75rem; border-radius: 0.375rem; display: inline-flex; align-items: center; gap: 0.5rem; font-size: 0.85rem; font-weight: 600;">
+                                    <i data-lucide="check-circle" size="14"></i>
+                                    Paid
+                                </span>
+                                <span style="font-size: 0.8rem; color: #065f46; margin-left: 0.5rem; font-weight: 600;">PKR ${paidForMonth.toLocaleString('en-PK')}</span>
+                            </div>
+                        `;
+                        container.appendChild(row);
+                    });
+                }
+            }
 
             if (window.lucide) lucide.createIcons();
+        }
+
+        function openManualPaymentModal(studentId) {
+            const students = getData(STORAGE_KEY_STUDENTS);
+            const student = students.find(s => s.id === studentId);
+            const monthlyFees = JSON.parse(localStorage.getItem(STORAGE_KEY_MONTHLY_FEES)) || {};
+            const studentRecord = monthlyFees[studentId] || {};
+            const paymentDetails = JSON.parse(localStorage.getItem('eduCore_payment_details') || '{}');
+            const studentPayments = paymentDetails[studentId] || {};
+            
+            const monthlyFee = parseInt(student?.monthlyFee || 0, 10) || 0;
+            const getPaidForMonth = (month) => {
+                const paid = Number(studentPayments[month]?.amount || 0);
+                if (paid > 0) return paid;
+                if (studentRecord[month] === 'Paid' && monthlyFee > 0) return monthlyFee;
+                return 0;
+            };
+
+            // Get admission month and year
+            let admissionMonthIndex = 0;
+            let admissionYear = new Date().getFullYear();
+            if (student?.admissionDate) {
+                const admissionDate = new Date(student.admissionDate);
+                admissionMonthIndex = admissionDate.getMonth();
+                admissionYear = admissionDate.getFullYear();
+            }
+
+            const currentYear = new Date().getFullYear();
+            const currentMonthIndex = new Date().getMonth();
+
+            const applicableMonths = [];
+            for (let year = admissionYear; year <= currentYear; year++) {
+                const startMonth = year === admissionYear ? admissionMonthIndex : 0;
+                const endMonth = year === currentYear ? currentMonthIndex : 11;
+                for (let i = startMonth; i <= endMonth; i++) {
+                    applicableMonths.push(monthsList[i]);
+                }
+            }
+
+            const pendingMonths = applicableMonths.filter((month) => getPaidForMonth(month) < monthlyFee);
+            
+            const monthSelect = document.getElementById('paymentMonth');
+            monthSelect.innerHTML = '<option value="">Select Month</option>';
+            pendingMonths.forEach(month => {
+                const paidForMonth = getPaidForMonth(month);
+                const dueForMonth = Math.max(monthlyFee - paidForMonth, 0);
+                const option = document.createElement('option');
+                option.value = month;
+                option.textContent = `${month} (Due: PKR ${dueForMonth.toLocaleString('en-PK')})`;
+                monthSelect.appendChild(option);
+            });
+
+            document.getElementById('paymentAmount').value = '';
+            document.getElementById('manualPaymentModal').dataset.studentId = studentId;
+            document.getElementById('manualPaymentModal').style.display = 'flex';
+        }
+
+        function closeManualPaymentModal() {
+            document.getElementById('manualPaymentModal').style.display = 'none';
+            document.getElementById('manualPaymentModal').dataset.studentId = '';
+        }
+
+        function submitManualPayment() {
+            const modal = document.getElementById('manualPaymentModal');
+            const studentId = modal.dataset.studentId;
+            const month = document.getElementById('paymentMonth').value;
+            const amount = parseInt(document.getElementById('paymentAmount').value || '0', 10);
+
+            if (!month) {
+                alert('Please select a month');
+                return;
+            }
+
+            if (amount <= 0) {
+                alert('Please enter a valid amount');
+                return;
+            }
+
+            const paymentDetails = JSON.parse(localStorage.getItem('eduCore_payment_details') || '{}');
+            if (!paymentDetails[studentId]) paymentDetails[studentId] = {};
+
+            // ADD to existing payment instead of replacing it
+            const existingPayment = paymentDetails[studentId][month] || { amount: 0, challanNumbers: [] };
+            const totalAmount = (existingPayment.amount || 0) + amount;
+
+            paymentDetails[studentId][month] = {
+                amount: totalAmount,
+                challanNumbers: existingPayment.challanNumbers || [],
+                date: new Date().toISOString(),
+                type: 'manual'
+            };
+
+            localStorage.setItem('eduCore_payment_details', JSON.stringify(paymentDetails));
+            closeManualPaymentModal();
+            renderMonthlyFeeRecord(studentId);
+            alert('Payment recorded successfully!');
         }
 
         function toggleMonthFee(studentId, month) {

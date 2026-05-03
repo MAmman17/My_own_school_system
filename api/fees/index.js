@@ -1,11 +1,11 @@
 const { createHandler, sendJson } = require('../_lib/http');
-const { getDb } = require('../_lib/db');
+const { getDb, Op } = require('../_lib/db');
 
 module.exports = createHandler({
     GET: async ({ res, db }) => {
         const { FeePayment } = db.models;
         const payments = await FeePayment.findAll({
-            where: { status: 'Paid' },
+            where: { status: { [Op.in]: ['Paid', 'Partial'] } },
             order: [['paidAt', 'DESC']]
         });
 

@@ -23,8 +23,10 @@ module.exports = createHandler({
                 rollNo,
                 classGrade,
                 feeMonth,
+                feeMonths,
                 session,
                 amount,
+                fullAmount,
                 challanNumber
             } = item || {};
 
@@ -42,8 +44,10 @@ module.exports = createHandler({
                 rollNo: rollNo || '',
                 classGrade: classGrade || '',
                 feeMonth,
+                feeMonths: Array.isArray(feeMonths) ? feeMonths : [],
                 session: session || '',
                 amount: Number(amount || 0),
+                fullAmount: Number(fullAmount || amount || 0),
                 challanNumber
             });
 
@@ -59,4 +63,3 @@ module.exports = createHandler({
         });
     }
 });
-

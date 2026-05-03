@@ -1569,8 +1569,10 @@ app.post('/api/fees/challan-token', async (req, res) => {
             rollNo,
             classGrade,
             feeMonth,
+            feeMonths,
             session,
             amount,
+            fullAmount,
             challanNumber
         } = req.body || {};
 
@@ -1584,8 +1586,10 @@ app.post('/api/fees/challan-token', async (req, res) => {
             rollNo: rollNo || '',
             classGrade: classGrade || '',
             feeMonth,
+            feeMonths: Array.isArray(feeMonths) ? feeMonths : [],
             session: session || '',
             amount: Number(amount || 0),
+            fullAmount: Number(fullAmount || amount || 0),
             challanNumber
         }, JWT_SECRET, { expiresIn: '120d' });
 
@@ -1656,8 +1660,10 @@ app.post('/api/fees/challan-tokens', async (req, res) => {
                 rollNo: item?.rollNo || '',
                 classGrade: item?.classGrade || '',
                 feeMonth,
+                feeMonths: Array.isArray(item?.feeMonths) ? item.feeMonths : [],
                 session: item?.session || '',
                 amount: Number(item?.amount || 0),
+                fullAmount: Number(item?.fullAmount || item?.amount || 0),
                 challanNumber
             }, JWT_SECRET, { expiresIn: '120d' });
 
@@ -1678,6 +1684,125 @@ app.post('/api/fees/challan-tokens', async (req, res) => {
     }
 });
 
+app.post('/api/fees/manual-payment', async (req, res) => {
+    if (!sequelize) {
+        return res.status(503).json({ success: false, message: 'Database offline' });
+    }
+
+    try {
+        const {
+            studentId,
+            studentName,
+            rollNo,
+            classGrade,
+            feeMonth,
+            feeMonths,
+            session,
+            amount,
+            fullAmount,
+            challanNumber
+        } = req.body || {};
+
+        if (!studentId) {
+            return res.status(400).json({ success: false, message: 'studentId is required.' });
+        }
+
+        const Student = sequelize.models.Student;
+        const FeePayment = sequelize.models.FeePayment;
+        const FeeDueBalance = sequelize.models.FeeDueBalance;
+
+        const student = await Student.findByPk(studentId);
+        if (!student) {
+            return res.status(404).json({ success: false, message: 'Student not found.' });
+        }
+
+        const paymentAmount = Number(amount || 0);
+        const safeFullAmount = Number(fullAmount || amount || student.monthlyFee || 0);
+        const remainingDue = Math.max(safeFullAmount - paymentAmount, 0);
+        const resolvedStatus = remainingDue > 0 ? 'Partial' : 'Paid';
+
+        const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+
+        const normalizeMonthList = (value) => Array.isArray(value)
+            ? value.map((item) => String(item || '').trim()).filter(Boolean)
+            : [];
+        const extractMonthList = (value) => {
+            const lower = String(value || '').toLowerCase();
+            return MONTHS.filter((month) => {
+                const full = month.toLowerCase();
+                const short = month.slice(0, 3).toLowerCase();
+                return lower.includes(full) || lower.includes(short);
+            });
+        };
+
+        let selectedMonths = normalizeMonthList(feeMonths);
+        if (!selectedMonths.length) selectedMonths = extractMonthList(feeMonth);
+
+        const feeMonthRecorded = selectedMonths.length ? selectedMonths.join(', ') : 'Dues';
+        const safeChallanNumber = String(challanNumber || '').trim() || `MAN-${Date.now()}`;
+
+        const existingPayment = await FeePayment.findByPk(safeChallanNumber);
+        const alreadyRecorded = existingPayment && ['Paid', 'Partial'].includes(String(existingPayment.status || ''));
+        const paidAt = existingPayment?.paidAt || new Date();
+        const paymentDateLabel = paidAt.toLocaleDateString('en-GB');
+
+        const paymentRow = {
+            challanNumber: safeChallanNumber,
+            studentId,
+            studentName: studentName || student.fullName || '',
+            rollNo: rollNo || student.rollNo || '',
+            classGrade: classGrade || student.classGrade || '',
+            session: session || '',
+            feeMonth: feeMonthRecorded,
+            amount: paymentAmount,
+            status: resolvedStatus,
+            paidAt,
+            paymentDateLabel,
+            paymentSource: 'Manual'
+        };
+
+        await FeePayment.upsert(paymentRow);
+
+        if (!alreadyRecorded && FeeDueBalance) {
+            const existingDue = await FeeDueBalance.findByPk(studentId);
+            const currentBalance = existingDue ? Number(existingDue.balance || 0) : 0;
+            const safeCurrent = Number.isFinite(currentBalance) ? currentBalance : 0;
+            const reducedBalance = Math.max(safeCurrent - paymentAmount, 0);
+
+            await FeeDueBalance.upsert({
+                studentId,
+                balance: reducedBalance,
+                updatedAtLabel: new Date().toLocaleString('en-GB')
+            });
+        }
+
+        const currentMonthName = MONTHS[new Date().getMonth()];
+        const currentLower = currentMonthName.toLowerCase();
+        const currentShortLower = currentMonthName.slice(0, 3).toLowerCase();
+        const currentMonthPaid = selectedMonths.some((month) => {
+            const lower = String(month || '').toLowerCase();
+            return lower === currentLower || lower === currentShortLower;
+        });
+
+        if (currentMonthPaid && resolvedStatus === 'Paid') {
+            await Student.update({
+                feesStatus: 'Paid',
+                paymentDate: paymentDateLabel
+            }, {
+                where: { id: studentId }
+            });
+        }
+
+        const allStudents = await Student.findAll();
+        io.emit('students_update', allStudents);
+        io.emit('fee_payment_update', { payment: paymentRow });
+
+        return res.json({ success: true, payment: paymentRow, alreadyRecorded });
+    } catch (error) {
+        return res.status(500).json({ success: false, message: error.message || 'Manual payment failed.' });
+    }
+});
+
 app.get('/api/fees/payments', async (req, res) => {
     if (!sequelize) {
         return res.status(503).json({ success: false, message: 'Database offline' });
@@ -1686,7 +1811,7 @@ app.get('/api/fees/payments', async (req, res) => {
     try {
         const FeePayment = sequelize.models.FeePayment;
         const payments = await FeePayment.findAll({
-            where: { status: 'Paid' },
+            where: { status: { [Op.in]: ['Paid', 'Partial'] } },
             order: [['paidAt', 'DESC']]
         });
 
@@ -1698,6 +1823,35 @@ app.get('/api/fees/payments', async (req, res) => {
         return res.status(500).json({
             success: false,
             message: error.message || 'Fee payments could not be loaded.'
+        });
+    }
+});
+
+app.get('/api/fees/due-balances', async (req, res) => {
+    if (!sequelize) {
+        return res.status(503).json({ success: false, message: 'Database offline' });
+    }
+
+    try {
+        const FeeDueBalance = sequelize.models.FeeDueBalance;
+        if (!FeeDueBalance) {
+            return res.json({ success: true, balances: {} });
+        }
+
+        const rows = await FeeDueBalance.findAll();
+        const balances = rows.reduce((acc, row) => {
+            const studentId = String(row.studentId || '').trim();
+            if (!studentId) return acc;
+            const balance = Number(row.balance || 0);
+            acc[studentId] = Number.isFinite(balance) ? balance : 0;
+            return acc;
+        }, {});
+
+        return res.json({ success: true, balances });
+    } catch (error) {
+        return res.status(500).json({
+            success: false,
+            message: error.message || 'Due balances could not be loaded.'
         });
     }
 });
@@ -1715,6 +1869,7 @@ app.get('/api/fees/pay/:token', async (req, res) => {
         const payload = jwt.verify(req.params.token, JWT_SECRET);
         const Student = sequelize.models.Student;
         const FeePayment = sequelize.models.FeePayment;
+        const FeeDueBalance = sequelize.models.FeeDueBalance;
 
         const student = await Student.findByPk(payload.studentId);
         if (!student) {
@@ -1726,8 +1881,32 @@ app.get('/api/fees/pay/:token', async (req, res) => {
         }
 
         const existingPayment = await FeePayment.findByPk(payload.challanNumber);
+        const alreadyRecorded = existingPayment && ['Paid', 'Partial'].includes(String(existingPayment.status || ''));
         const paidAt = existingPayment?.paidAt || new Date();
         const paymentDateLabel = paidAt.toLocaleDateString('en-GB');
+
+        const paymentAmount = Number(payload.amount || student.monthlyFee || 0);
+        const fullAmount = Number(payload.fullAmount || payload.amount || student.monthlyFee || 0);
+        const remainingDue = Math.max(fullAmount - paymentAmount, 0);
+        const resolvedStatus = remainingDue > 0 ? 'Partial' : 'Paid';
+
+        const normalizeMonthList = (value) => Array.isArray(value)
+            ? value.map((item) => String(item || '').trim()).filter(Boolean)
+            : [];
+
+        const extractMonthList = (value) => {
+            const lower = String(value || '').toLowerCase();
+            return MONTHS.filter((month) => {
+                const full = month.toLowerCase();
+                const short = month.slice(0, 3).toLowerCase();
+                return lower.includes(full) || lower.includes(short);
+            });
+        };
+
+        let selectedMonths = normalizeMonthList(payload.feeMonths);
+        if (!selectedMonths.length) selectedMonths = extractMonthList(payload.feeMonth);
+        const monthsPaid = selectedMonths;
+        const feeMonthRecorded = monthsPaid.length ? monthsPaid.join(', ') : 'Dues';
 
         const paymentRow = {
             challanNumber: payload.challanNumber,
@@ -1736,9 +1915,9 @@ app.get('/api/fees/pay/:token', async (req, res) => {
             rollNo: payload.rollNo || student.rollNo || '',
             classGrade: payload.classGrade || student.classGrade || '',
             session: payload.session || '',
-            feeMonth: payload.feeMonth || '',
-            amount: Number(payload.amount || student.monthlyFee || 0),
-            status: 'Paid',
+            feeMonth: feeMonthRecorded,
+            amount: paymentAmount,
+            status: resolvedStatus,
             paidAt,
             paymentDateLabel,
             paymentSource: 'QR Scan'
@@ -1746,21 +1925,31 @@ app.get('/api/fees/pay/:token', async (req, res) => {
 
         await FeePayment.upsert(paymentRow);
 
-        const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
-        const getLongMonthName = (value) => {
-            const raw = String(value || '').trim();
-            if (!raw) return '';
-            const parsed = new Date(raw.replace(',', ' 1,'));
-            if (!Number.isNaN(parsed.getTime())) return MONTHS[parsed.getMonth()];
-            const lower = raw.toLowerCase();
-            return MONTHS.find((month) => lower.includes(month.toLowerCase()) || lower.includes(month.slice(0, 3).toLowerCase())) || raw;
-        };
+        if (!alreadyRecorded && FeeDueBalance) {
+            const existingDue = await FeeDueBalance.findByPk(payload.studentId);
+            const currentBalance = existingDue ? Number(existingDue.balance || 0) : 0;
+            const safeCurrent = Number.isFinite(currentBalance) ? currentBalance : 0;
+            const reducedBalance = Math.max(safeCurrent - paymentAmount, 0);
+
+            await FeeDueBalance.upsert({
+                studentId: payload.studentId,
+                balance: reducedBalance,
+                updatedAtLabel: new Date().toLocaleString('en-GB')
+            });
+        }
 
         const currentMonthName = MONTHS[new Date().getMonth()];
-        const paidMonthName = getLongMonthName(payload.feeMonth);
-        const shouldUpdateCurrentMonthStatus = paidMonthName === currentMonthName;
+        const feeMonthRaw = String(payload.feeMonth || '');
+        const feeMonthLower = feeMonthRaw.toLowerCase();
+        const currentLower = currentMonthName.toLowerCase();
+        const currentShortLower = currentMonthName.slice(0, 3).toLowerCase();
+        const shouldUpdateCurrentMonthStatus = feeMonthLower.includes(currentLower) || feeMonthLower.includes(currentShortLower);
 
-        if (shouldUpdateCurrentMonthStatus) {
+        const currentMonthPaid = monthsPaid.some((month) => {
+            const lower = String(month || '').toLowerCase();
+            return lower === currentLower || lower === currentShortLower;
+        });
+        if (resolvedStatus === 'Paid' && (shouldUpdateCurrentMonthStatus || currentMonthPaid) && monthsPaid.length) {
             await Student.update({
                 feesStatus: 'Paid',
                 paymentDate: paymentDateLabel
@@ -1774,17 +1963,20 @@ app.get('/api/fees/pay/:token', async (req, res) => {
         io.emit('fee_payment_update', { payment: paymentRow });
 
         return res.send(renderFeePaymentPage({
-            title: existingPayment?.status === 'Paid' ? 'Already Marked Paid' : 'Fee Marked Paid',
-            message: existingPayment?.status === 'Paid'
+            title: alreadyRecorded ? 'Already Recorded' : (paymentRow.status === 'Paid' ? 'Fee Marked Paid' : 'Payment Recorded'),
+            message: alreadyRecorded
                 ? 'This challan was already scanned earlier. The payment remains recorded in the system.'
-                : 'The fee has been marked as paid successfully in the system.',
+                : (paymentRow.status === 'Paid'
+                    ? 'The fee has been marked as paid successfully in the system.'
+                    : 'Payment has been recorded. Remaining amount is still due.'),
             details: [
                 { label: 'Student', value: payload.studentName || student.fullName || '-' },
                 { label: 'Roll No', value: payload.rollNo || student.rollNo || '-' },
                 { label: 'Class', value: payload.classGrade || student.classGrade || '-' },
                 { label: 'Fee Month', value: payload.feeMonth || '-' },
                 { label: 'Session', value: payload.session || '-' },
-                { label: 'Amount', value: `PKR ${Number(payload.amount || student.monthlyFee || 0).toLocaleString('en-PK')}` },
+                { label: 'Amount', value: `PKR ${Number(paymentAmount || 0).toLocaleString('en-PK')}` },
+                ...(remainingDue > 0 ? [{ label: 'Remaining Due', value: `PKR ${Number(remainingDue || 0).toLocaleString('en-PK')}` }] : []),
                 { label: 'Challan No.', value: payload.challanNumber || '-' },
                 { label: 'Paid On', value: paymentDateLabel }
             ],
@@ -2190,6 +2382,14 @@ function defineFeePaymentModel(db) {
     });
 }
 
+function defineFeeDueBalanceModel(db) {
+    return db.define('FeeDueBalance', {
+        studentId: { type: DataTypes.STRING, primaryKey: true },
+        balance: { type: DataTypes.DECIMAL(10, 2), defaultValue: 0 },
+        updatedAtLabel: DataTypes.STRING
+    });
+}
+
 function defineStudentAttendanceModel(db) {
     return db.define('StudentAttendance', {
         id: { type: DataTypes.STRING, primaryKey: true },
@@ -2578,6 +2778,7 @@ async function startServer() {
         defineUserModel(sequelize);
         defineStaffModel(sequelize);
         defineFeePaymentModel(sequelize);
+        defineFeeDueBalanceModel(sequelize);
         defineStudentAttendanceModel(sequelize);
         defineTeacherAttendanceModel(sequelize);
         defineSpecialNoticeModel(sequelize);

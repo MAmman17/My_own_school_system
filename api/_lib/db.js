@@ -129,6 +129,14 @@ function defineFeePaymentModel(db) {
     });
 }
 
+function defineFeeDueBalanceModel(db) {
+    return db.define('FeeDueBalance', {
+        studentId: { type: DataTypes.STRING, primaryKey: true },
+        balance: { type: DataTypes.DECIMAL(10, 2), defaultValue: 0 },
+        updatedAtLabel: DataTypes.STRING
+    });
+}
+
 function defineStudentAttendanceModel(db) {
     return db.define('StudentAttendance', {
         id: { type: DataTypes.STRING, primaryKey: true },
@@ -309,6 +317,7 @@ async function getDb() {
             defineUserModel(db);
             defineStaffModel(db);
             defineFeePaymentModel(db);
+            defineFeeDueBalanceModel(db);
             defineStudentAttendanceModel(db);
             defineTeacherAttendanceModel(db);
             defineAppSettingModel(db);

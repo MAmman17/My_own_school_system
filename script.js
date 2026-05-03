@@ -654,12 +654,20 @@ document.addEventListener('DOMContentLoaded', () => {
         studentForm.addEventListener('submit', handleStudentFormSubmit);
         const studentSearch = document.getElementById('studentSearchInput');
         const quickFilter = document.getElementById('studentQuickFilter');
+        const printMode = document.getElementById('studentPrintMode');
         bindStudentQuickFilterMultiSelect();
         if (studentSearch) {
             studentSearch.addEventListener('input', renderStudents);
         }
         if (quickFilter) {
             quickFilter.addEventListener('change', renderStudents);
+        }
+        if (printMode) {
+            const saved = String(localStorage.getItem('eduCore_student_print_mode') || '').trim();
+            printMode.value = (saved === 'outer' || saved === 'school') ? saved : 'school';
+            printMode.addEventListener('change', () => {
+                localStorage.setItem('eduCore_student_print_mode', String(printMode.value || 'school'));
+            });
         }
     }
 
@@ -811,6 +819,9 @@ function mergeStudentRecords(incomingStudents) {
             admissionDate: student.admissionDate || localStudent.admissionDate || '',
             gender: student.gender || localStudent.gender || '',
         campusName: student.campusName || localStudent.campusName || 'Main Campus',
+            enrollmentStatus: student.enrollmentStatus || localStudent.enrollmentStatus || (student.isTerminated ? 'Terminated' : 'Active'),
+            terminatedAt: student.terminatedAt || localStudent.terminatedAt || '',
+            terminationNote: student.terminationNote || localStudent.terminationNote || '',
             plainPassword: student.plainPassword || localStudent.plainPassword ||
                 (localStudent.password && !isHashedPassword(localStudent.password) ? localStudent.password : '')
         };
@@ -854,6 +865,78 @@ function mergeTeacherRecords(incomingTeachers) {
     });
 
     return mergedTeachers;
+}
+
+function isStudentTerminated(student) {
+    const enrollmentStatus = String(student?.enrollmentStatus || '').trim().toLowerCase();
+    if (enrollmentStatus === 'terminated' || enrollmentStatus === 'left' || enrollmentStatus === 'inactive') return true;
+    if (student?.isTerminated === true) return true; // legacy
+    return String(student?.feesStatus || '').trim().toLowerCase() === 'terminated';
+}
+
+function terminateStudent(studentId) {
+    const students = getData(STORAGE_KEY_STUDENTS);
+    const index = students.findIndex((s) => String(s?.id || '') === String(studentId || ''));
+    if (index === -1) return;
+
+    const student = students[index];
+    if (isStudentTerminated(student)) {
+        showAppAlert('Student is already marked as terminated.', 'No Changes');
+        return;
+    }
+
+    const confirmText = `Mark "${student.fullName || 'Student'}" as terminated (left school)?\n\nAfter termination, fee calculation and challan generation will be disabled for this student.`;
+    const ok = typeof showAppConfirm === 'function' ? showAppConfirm(confirmText) : Promise.resolve(window.confirm(confirmText));
+
+    Promise.resolve(ok).then((confirmed) => {
+        if (!confirmed) return;
+
+        const today = new Date().toISOString().split('T')[0];
+        const updatedStudent = {
+            ...student,
+            enrollmentStatus: 'Terminated',
+            terminatedAt: today,
+            terminationNote: student.terminationNote || ''
+        };
+
+        students[index] = updatedStudent;
+        saveData(STORAGE_KEY_STUDENTS, students, { skipSync: true });
+        syncToSQLDetailed('students', [updatedStudent]).catch(() => {});
+        pushNotification('Student Updated', `"${updatedStudent.fullName || 'Student'}" marked as terminated.`, 'info');
+        renderStudents();
+    }).catch(() => {});
+}
+
+function reactivateStudent(studentId) {
+    const students = getData(STORAGE_KEY_STUDENTS);
+    const index = students.findIndex((s) => String(s?.id || '') === String(studentId || ''));
+    if (index === -1) return;
+
+    const student = students[index];
+    if (!isStudentTerminated(student)) {
+        showAppAlert('Student is not marked as terminated.', 'No Changes');
+        return;
+    }
+
+    const confirmText = `Reactivate "${student.fullName || 'Student'}"?\n\nThis will include the student again in fee calculations and challan generation.`;
+    const ok = typeof showAppConfirm === 'function' ? showAppConfirm(confirmText) : Promise.resolve(window.confirm(confirmText));
+
+    Promise.resolve(ok).then((confirmed) => {
+        if (!confirmed) return;
+
+        const updatedStudent = {
+            ...student,
+            enrollmentStatus: 'Active',
+            terminatedAt: '',
+            terminationNote: ''
+        };
+
+        students[index] = updatedStudent;
+        saveData(STORAGE_KEY_STUDENTS, students, { skipSync: true });
+        syncToSQLDetailed('students', [updatedStudent]).catch(() => {});
+        pushNotification('Student Updated', `"${updatedStudent.fullName || 'Student'}" reactivated.`, 'success');
+        renderStudents();
+    }).catch(() => {});
 }
 
 function mergeStaffRecords(incomingStaff) {
@@ -2797,6 +2880,9 @@ async function handleStudentFormSubmit(e) {
         rollNo: document.getElementById('rollNo').value,
         formB: document.getElementById('formB').value,
         feesStatus: currentStatus,
+        enrollmentStatus: existingStudent?.enrollmentStatus || 'Active',
+        terminatedAt: existingStudent?.terminatedAt || '',
+        terminationNote: existingStudent?.terminationNote || '',
         monthlyFee: monthlyFeeInput,
         feeFrequency: document.getElementById('feeFrequency') ? document.getElementById('feeFrequency').value : 'Monthly',
         username: usernameInput,
@@ -2890,6 +2976,24 @@ function handleStudentActionSelect(selectElement, encodedPayload, studentId, isB
         return;
     }
 
+    if (action === 'terminate') {
+        if (!canCurrentUserPerformAction('students', 'edit')) {
+            showAppAlert('You do not have permission to update student status.', 'Permission Denied');
+            return;
+        }
+        terminateStudent(studentId);
+        return;
+    }
+
+    if (action === 'reactivate') {
+        if (!canCurrentUserPerformAction('students', 'edit')) {
+            showAppAlert('You do not have permission to update student status.', 'Permission Denied');
+            return;
+        }
+        reactivateStudent(studentId);
+        return;
+    }
+
     if (action === 'delete') {
         if (!canCurrentUserPerformAction('students', 'delete')) {
             showAppAlert('You do not have permission to delete students.', 'Permission Denied');
@@ -2916,7 +3020,7 @@ function viewStudent(student) {
         viewStudentClass: student.classGrade || '-',
         viewStudentCampus: student.campusName || 'Main Campus',
         viewStudentGender: student.gender || '-',
-        viewStudentStatus: student.feesStatus || 'Pending',
+        viewStudentStatus: isStudentTerminated(student) ? 'Terminated' : (student.feesStatus || 'Pending'),
         viewStudentPhone: student.parentPhone || '-',
         viewStudentEmail: student.email || '-',
         viewStudentUsername: student.username || '-'
@@ -3288,7 +3392,11 @@ function renderStudents(term = '') {
     } else {
         noData.style.display = 'none';
         filtered.forEach(s => {
-            let statusClass = s.feesStatus === 'Paid' ? 'status-paid' : (s.feesStatus === 'Late' ? 'status-failed' : 'status-pending');
+            const terminated = isStudentTerminated(s);
+            const statusLabel = terminated ? 'Terminated' : (s.feesStatus || 'Pending');
+            let statusClass = terminated
+                ? 'status-failed'
+                : (s.feesStatus === 'Paid' ? 'status-paid' : (s.feesStatus === 'Late' ? 'status-failed' : 'status-pending'));
             const encodedStudent = encodeURIComponent(JSON.stringify(s));
             const tr = document.createElement('tr');
             tr.innerHTML = `
@@ -3303,12 +3411,13 @@ function renderStudents(term = '') {
                 <td class="cell-compact">${s.classGrade}</td>
                 <td class="cell-compact">${s.campusName || 'Main Campus'}</td>
                 <td>${s.gender || '-'}</td>
-                <td><span class="status-badge ${statusClass}">${s.feesStatus}</span></td>
+                <td><span class="status-badge ${statusClass}">${statusLabel}</span></td>
                 <td><div class="table-action-wrap">
                     <select class="table-action-select" onchange="handleStudentActionSelect(this, '${encodedStudent}', '${s.id}', ${isBranchUser ? 1 : 0})">
                         <option value="">Actions</option>
                         <option value="view">View</option>
                         ${canEditStudents ? '<option value="edit">Edit</option>' : ''}
+                        ${canEditStudents ? (terminated ? '<option value="reactivate">Reactivate</option>' : '<option value="terminate">Mark Terminated</option>') : ''}
                         ${canDeleteStudents ? '<option value="delete">Delete</option>' : ''}
                     </select>
                 </div>
@@ -3318,6 +3427,202 @@ function renderStudents(term = '') {
         });
         window.lucide.createIcons();
     }
+}
+
+function printStudentsList() {
+    if (!isCurrentPage('students.html')) {
+        window.print();
+        return;
+    }
+
+    const searchInput = document.getElementById('studentSearchInput');
+    const quickFilter = document.getElementById('studentQuickFilter');
+    const printModeEl = document.getElementById('studentPrintMode');
+    const loggedInUser = getLoggedInUser();
+
+    const escapeHtml = (value) => String(value ?? '').replace(/[&<>"']/g, (char) => ({
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        '"': '&quot;',
+        "'": '&#39;'
+    }[char]));
+
+    populateStudentQuickFilterOptions();
+
+    const term = (searchInput ? searchInput.value : '').toLowerCase().trim();
+    const selectedQuickValues = getStudentQuickFilterSelectedValues(quickFilter);
+    const parsedFilters = parseStudentQuickFilterValues(selectedQuickValues);
+
+    const printModeRaw = String(printModeEl ? printModeEl.value : (localStorage.getItem('eduCore_student_print_mode') || 'school')).trim().toLowerCase();
+    const printMode = (printModeRaw === 'outer' || printModeRaw === 'school') ? printModeRaw : 'school';
+    if (printModeEl && printModeEl.value !== printMode) printModeEl.value = printMode;
+    localStorage.setItem('eduCore_student_print_mode', printMode);
+
+    const genderSet = new Set(parsedFilters.genders.map((gender) => String(gender || '').toLowerCase()));
+    let campusSet = new Set(parsedFilters.campuses.map((campus) => String(campus || '').toLowerCase()));
+    const requireBelow5 = parsedFilters.below5;
+
+    if (loggedInUser?.role === 'Branch' && loggedInUser.campusName) {
+        campusSet = new Set([String(loggedInUser.campusName).toLowerCase()]);
+    }
+
+    const students = getData(STORAGE_KEY_STUDENTS);
+    const filtered = students
+        .filter((s) =>
+            (
+                !term ||
+                (s.fullName && s.fullName.toLowerCase().includes(term)) ||
+                (s.rollNo && s.rollNo.toString().toLowerCase().includes(term)) ||
+                (s.studentCode && s.studentCode.toLowerCase().includes(term))
+            ) &&
+            (genderSet.size === 0 || genderSet.has(String(s.gender || '').toLowerCase())) &&
+            (!requireBelow5 || isStudentBelowAge(s, 5)) &&
+            (campusSet.size === 0 || campusSet.has(String(s.campusName || 'Main Campus').toLowerCase()))
+        )
+        .sort((a, b) => {
+            const rollA = Number.parseInt(String(a.rollNo || ''), 10);
+            const rollB = Number.parseInt(String(b.rollNo || ''), 10);
+            const rollAValid = Number.isFinite(rollA);
+            const rollBValid = Number.isFinite(rollB);
+            if (rollAValid && rollBValid && rollA !== rollB) return rollA - rollB;
+            if (rollAValid !== rollBValid) return rollAValid ? -1 : 1;
+            return String(a.fullName || '').localeCompare(String(b.fullName || ''));
+        });
+
+    const settings = getData(STORAGE_KEY_SETTINGS) || {};
+    const schoolName = settings.schoolName || 'Student List';
+    const printedAt = new Date().toLocaleString();
+    const modeLabel = printMode === 'outer' ? 'Outer Student List' : 'School Student List';
+
+    const formatDateSafe = (value) => {
+        try {
+            return escapeHtml(formatDateForDisplay(value));
+        } catch (_error) {
+            return escapeHtml(value || '-');
+        }
+    };
+
+    const rowsMarkup = filtered.length
+        ? filtered.map((s, idx) => {
+            if (printMode === 'outer') {
+                return `
+                    <tr>
+                        <td class="num">${idx + 1}</td>
+                        <td>${escapeHtml(s.fullName || '-')}</td>
+                        <td>${escapeHtml(s.fatherName || '-')}</td>
+                        <td>${escapeHtml(s.parentPhone || '-')}</td>
+                        <td>${escapeHtml(s.rollNo || '-')}</td>
+                    </tr>
+                `;
+            }
+
+            return `
+                <tr>
+                    <td class="num">${idx + 1}</td>
+                    <td>${escapeHtml(s.studentCode || '-')}</td>
+                    <td>${escapeHtml(s.rollNo || '-')}</td>
+                    <td>${escapeHtml(s.fullName || '-')}</td>
+                    <td>${escapeHtml(s.fatherName || '-')}</td>
+                    <td>${escapeHtml(s.parentPhone || '-')}</td>
+                    <td>${formatDateSafe(s.dob)}</td>
+                    <td>${formatDateSafe(s.admissionDate)}</td>
+                    <td>${escapeHtml(s.classGrade || '-')}</td>
+                    <td>${escapeHtml(s.campusName || 'Main Campus')}</td>
+                    <td>${escapeHtml(s.gender || '-')}</td>
+                    <td>${escapeHtml(s.email || '-')}</td>
+                    <td>${escapeHtml(s.formB || '-')}</td>
+                    <td>${escapeHtml(s.monthlyFee || '-')}</td>
+                    <td>${escapeHtml(isStudentTerminated(s) ? 'Terminated' : (s.feesStatus || '-'))}</td>
+                </tr>
+            `;
+        }).join('')
+        : `<tr><td colspan="${printMode === 'outer' ? 5 : 15}" class="empty">No students match the current filter.</td></tr>`;
+
+    const html = `
+        <!doctype html>
+        <html>
+        <head>
+            <meta charset="utf-8" />
+            <meta name="viewport" content="width=device-width, initial-scale=1" />
+            <title>${escapeHtml(schoolName)} - Students</title>
+            <style>
+                :root { color-scheme: light; }
+                @page { size: ${printMode === 'school' ? 'A4 landscape' : 'A4'}; margin: 12mm; }
+                body { font-family: Arial, sans-serif; color: #111827; }
+                .header { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 10px; }
+                .title { font-size: 18px; font-weight: 700; }
+                .meta { font-size: 12px; color: #475569; }
+                table { width: 100%; border-collapse: collapse; font-size: ${printMode === 'school' ? '10px' : '12px'}; }
+                th, td { border: 1px solid #64748b; padding: 6px 8px; }
+                th { background: #f1f5f9; text-align: left; }
+                td.num { width: 30px; text-align: center; }
+                td.empty { text-align: center; color: #475569; padding: 16px 8px; }
+                .nowrap { white-space: nowrap; }
+            </style>
+        </head>
+        <body>
+            <div class="header">
+                <div>
+                    <div class="title">${escapeHtml(schoolName)}</div>
+                    <div class="meta">${escapeHtml(modeLabel)}</div>
+                </div>
+                <div class="meta">Printed: ${escapeHtml(printedAt)} | Total: ${filtered.length}</div>
+            </div>
+            <table>
+                <thead>
+                    ${printMode === 'outer'
+        ? `
+                        <tr>
+                            <th style="width:30px;">#</th>
+                            <th>Student Name</th>
+                            <th>Father Name</th>
+                            <th>Contact No</th>
+                            <th style="width:70px;">Roll No</th>
+                        </tr>
+                    `
+        : `
+                        <tr>
+                            <th style="width:30px;">#</th>
+                            <th class="nowrap">Student ID</th>
+                            <th class="nowrap">Roll No</th>
+                            <th>Student Name</th>
+                            <th>Father Name</th>
+                            <th class="nowrap">Contact No</th>
+                            <th class="nowrap">DOB</th>
+                            <th class="nowrap">Admission Date</th>
+                            <th>Class</th>
+                            <th>Campus</th>
+                            <th>Gender</th>
+                            <th>Email</th>
+                            <th class="nowrap">Form B</th>
+                            <th class="nowrap">Monthly Fee</th>
+                            <th class="nowrap">Fee Status</th>
+                        </tr>
+                    `}
+                </thead>
+                <tbody>
+                    ${rowsMarkup}
+                </tbody>
+            </table>
+            <script>
+                window.focus();
+                window.print();
+                window.onafterprint = () => window.close();
+            </script>
+        </body>
+        </html>
+    `;
+
+    const printWindow = window.open('', 'eduCoreStudentPrint', 'width=1000,height=700');
+    if (!printWindow) {
+        alert('Popup blocked. Please allow popups to print the student list.');
+        return;
+    }
+
+    printWindow.document.open();
+    printWindow.document.write(html);
+    printWindow.document.close();
 }
 
 function populateStudentQuickFilterOptions() {
